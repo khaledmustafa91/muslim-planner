@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Amiri, Tajawal } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const tajawal = Tajawal({
@@ -21,9 +22,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl">
-      <body className={`${tajawal.variable} ${amiri.variable} font-tajawal bg-slate-50 text-slate-900`}>
-        {children}
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body className={`${tajawal.variable} ${amiri.variable} font-tajawal bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
