@@ -19,8 +19,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (isGuestOnly && session) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (isGuestOnly) {
+    if (session) {
+      // User has valid session, redirect to dashboard
+      return NextResponse.redirect(new URL("/", request.url));
+    } else if (token) {
+      // Token exists but is invalid/malformed - actively clear it
+      const response = NextResponse.next();
+      response.cookies.set(sessionCookieName, "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 0,
+        path: "/"
+      });
+      return response;
+    }
   }
 
   return NextResponse.next();
