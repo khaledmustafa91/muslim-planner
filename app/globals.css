@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 0.5cm;
+  }
+
+  body {
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+}
+
+.print-only {
+  display: none;
+}
+
+.checkbox-wrapper {
+  transition: all 0.2s;
+}
+
+.checkbox-wrapper:active {
+  transform: scale(0.9);
+}
