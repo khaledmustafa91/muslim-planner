@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     const plan = await getPlanByYear(session.userId, year);
     return NextResponse.json(plan);
   } catch (error) {
+    console.error("[API_PLAN_GET_ERROR]", error);
     if (error instanceof Error) {
       return badRequest(error.message);
     }

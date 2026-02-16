@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { badRequest } from "@/lib/validation";
 
 interface Context {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function PATCH(request: NextRequest, context: Context) {
@@ -13,7 +13,7 @@ export async function PATCH(request: NextRequest, context: Context) {
     return badRequest("غير مصرح", 401);
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
   const ownership = await assertSectionOwnership(id, session.userId);
   if (!ownership) {
     return badRequest("غير مصرح", 403);
@@ -37,7 +37,7 @@ export async function DELETE(_request: NextRequest, context: Context) {
     return badRequest("غير مصرح", 401);
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
   const ownership = await assertSectionOwnership(id, session.userId);
   if (!ownership) {
     return badRequest("غير مصرح", 403);

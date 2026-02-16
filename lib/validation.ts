@@ -18,6 +18,7 @@ export function validateCredentials(username: unknown, password: unknown): strin
 }
 
 export function badRequest(message: string, status = 400) {
+  console.warn(`[BadRequest] ${status}: ${message}`);
   return NextResponse.json({ error: message }, { status });
 }
 

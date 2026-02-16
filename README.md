@@ -24,7 +24,18 @@ Do not expose these variables to the client (`NEXT_PUBLIC_*`).
 
 ## 3) Database migration
 
-Run `db/migrations/001_init.sql` against your Vercel Postgres database.
+Run the migration files in `db/migrations/` sequentially against your database (e.g., Vercel or Neon Postgres).
+
+```bash
+psql $POSTGRES_URL < db/migrations/001_init.sql
+psql $POSTGRES_URL < db/migrations/002_add_indices.sql
+```
+
+## Performance Considerations
+- Database indices exist on all foreign keys for fast JOIN performance.
+- Progress calculation is done server-side using PostgreSQL aggregation.
+- After state mutations (reorder, update), the application automatically synchronizes with the database.
+
 
 ## 4) Run locally
 
