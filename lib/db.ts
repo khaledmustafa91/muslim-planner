@@ -73,6 +73,33 @@ export async function getOrCreatePlan(userId: string, ramadanYear: number): Prom
   return createPlanWithDefaults(userId, ramadanYear);
 }
 
+export async function getPlanProgress(planId: string): Promise<number> {
+  const result = await sql<{ progress: number }>`
+    WITH plan_stats AS (
+      SELECT
+        COUNT(DISTINCT t.id) AS total_tasks,
+        (SELECT day_count FROM plans WHERE id = ${planId}) AS day_count
+      FROM tasks t
+      JOIN sections s ON s.id = t.section_id
+      WHERE s.plan_id = ${planId}
+    ),
+    completed_stats AS (
+      SELECT COUNT(*) AS completed_count
+      FROM checkins c
+      JOIN tasks t ON t.id = c.task_id
+      JOIN sections s ON s.id = t.section_id
+      WHERE s.plan_id = ${planId} AND c.done = true
+    )
+    SELECT
+      CASE
+        WHEN total_tasks = 0 OR day_count = 0 THEN 0
+        ELSE ROUND((completed_count::numeric / (total_tasks * day_count) * 100)::numeric)
+      END AS progress
+    FROM plan_stats, completed_stats
+  `;
+  return result.rows[0]?.progress ?? 0;
+}
+
 export async function getPlanByYear(userId: string, ramadanYear: number): Promise<PlanResponse> {
   const planId = await getOrCreatePlan(userId, ramadanYear);
 
@@ -139,12 +166,15 @@ export async function getPlanByYear(userId: string, ramadanYear: number): Promis
     WHERE s.plan_id = ${planId}
   `;
 
+  const progress = await getPlanProgress(planId);
+
   return {
     planId,
     ramadanYear,
     dayCount: planRow.rows[0].day_count,
     sections: [...sectionsMap.values()],
-    checkins: checkinRows.rows
+    checkins: checkinRows.rows,
+    progress
   };
 }
 
@@ -286,4 +316,27 @@ export async function toggleCheckin(taskId: string, dayNumber: number, done: boo
 
 export async function updatePlanDayCount(planId: string, dayCount: 29 | 30): Promise<void> {
   await sql`UPDATE plans SET day_count = ${dayCount} WHERE id = ${planId}`;
+}
+
+export async function reorderSections(planId: string, sectionIds: string[]): Promise<void> {
+  // Update all sections in a single transaction-like sequence
+  // We use a loop here because our sql helper doesn't support transactions yet, 
+  // but since we are in a serverless environment, it's efficient enough.
+  for (let i = 0; i < sectionIds.length; i++) {
+    await sql`
+      UPDATE sections 
+      SET sort_order = ${i + 1} 
+      WHERE id = ${sectionIds[i]} AND plan_id = ${planId}
+    `;
+  }
+}
+
+export async function reorderTasks(sectionId: string, taskIds: string[]): Promise<void> {
+  for (let i = 0; i < taskIds.length; i++) {
+    await sql`
+      UPDATE tasks 
+      SET sort_order = ${i + 1}, section_id = ${sectionId}
+      WHERE id = ${taskIds[i]}
+    `;
+  }
 }

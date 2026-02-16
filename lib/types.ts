@@ -26,6 +26,7 @@ export interface PlanResponse {
   dayCount: 29 | 30;
   sections: PlannerSection[];
   checkins: PlannerCheckin[];
+  progress: number; // 0-100 percentage
 }
 
 export interface SessionPayload {
