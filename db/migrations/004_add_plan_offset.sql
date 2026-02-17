@@ -1,0 +1,1 @@
+ALTER TABLE plans ADD COLUMN IF NOT EXISTS ramadan_offset int NOT NULL DEFAULT 0;

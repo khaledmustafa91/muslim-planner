@@ -60,3 +60,32 @@ export async function sql<T extends Record<string, any> = any>(
     throw error;
   }
 }
+
+/**
+ * Execute a raw SQL string without parameter binding.
+ * Dangerous: only use for trusted content like migration files.
+ */
+export async function executeRaw(content: string): Promise<void> {
+  const connectionString = process.env.POSTGRES_URL;
+  if (!connectionString) throw new Error("POSTGRES_URL is missing.");
+  
+  const isLocal = /localhost|127\.0\.0\.1/.test(connectionString);
+
+  // Split content by semicolons, but ignore empty results from trailing semicolons
+  const commands = content
+    .split(";")
+    .map(c => c.trim())
+    .filter(c => c.length > 0);
+
+  if (!isLocal) {
+    const neonSql = neon(connectionString);
+    for (const cmd of commands) {
+      await (neonSql as any).query(cmd);
+    }
+  } else {
+    if (!pgPool) pgPool = new Pool({ connectionString });
+    for (const cmd of commands) {
+      await pgPool.query(cmd);
+    }
+  }
+}

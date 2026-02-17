@@ -20,12 +20,25 @@ export interface PlannerCheckin {
   done: boolean;
 }
 
+export interface ScheduledTask {
+  id: string;
+  taskId: string;
+  title: string;
+  sectionTitle: string;
+  scheduledTime: string;
+  dayNumber: number;
+  durationMinutes: number;
+  done: boolean;
+}
+
 export interface PlanResponse {
   planId: string;
   ramadanYear: number;
   dayCount: 29 | 30;
+  ramadanOffset: number;
   sections: PlannerSection[];
   checkins: PlannerCheckin[];
+  scheduledTasks: ScheduledTask[];
   progress: number; // 0-100 percentage
 }
 

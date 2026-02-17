@@ -1,6 +1,6 @@
 import { sql } from "@/lib/sql";
 import { defaultSections } from "@/lib/default-plan";
-import type { PlanResponse, PlannerCheckin, PlannerSection } from "@/lib/types";
+import type { PlanResponse, PlannerCheckin, PlannerSection, ScheduledTask } from "@/lib/types";
 
 export interface UserRecord {
   id: string;
@@ -103,8 +103,8 @@ export async function getPlanProgress(planId: string): Promise<number> {
 export async function getPlanByYear(userId: string, ramadanYear: number): Promise<PlanResponse> {
   const planId = await getOrCreatePlan(userId, ramadanYear);
 
-  const planRow = await sql<{ day_count: 29 | 30 }>`
-    SELECT day_count
+  const planRow = await sql<{ day_count: 29 | 30; ramadan_offset: number }>`
+    SELECT day_count, ramadan_offset
     FROM plans
     WHERE id = ${planId} AND user_id = ${userId}
     LIMIT 1
@@ -168,14 +168,70 @@ export async function getPlanByYear(userId: string, ramadanYear: number): Promis
 
   const progress = await getPlanProgress(planId);
 
+  const scheduledRows = await sql<ScheduledTask & { dayNumber: number }>`
+    SELECT 
+      ts.id, 
+      ts.task_id AS "taskId", 
+      t.title, 
+      s.title AS "sectionTitle", 
+      ts.scheduled_time AS "scheduledTime",
+      ts.day_number AS "dayNumber",
+      ts.duration_minutes AS "durationMinutes",
+      COALESCE(c.done, false) AS done
+    FROM task_schedules ts
+    JOIN tasks t ON t.id = ts.task_id
+    JOIN sections s ON s.id = t.section_id
+    LEFT JOIN checkins c ON c.task_id = t.id AND c.day_number = ts.day_number
+    WHERE s.plan_id = ${planId}
+    ORDER BY ts.scheduled_time ASC
+  `;
+
   return {
     planId,
     ramadanYear,
     dayCount: planRow.rows[0].day_count,
+    ramadanOffset: planRow.rows[0].ramadan_offset,
     sections: [...sectionsMap.values()],
     checkins: checkinRows.rows,
-    progress
+    progress,
+    scheduledTasks: scheduledRows.rows
   };
+}
+
+export async function scheduleTask(taskId: string, dayNumber: number, scheduledTime: string, durationMinutes: number = 30): Promise<void> {
+  await sql`
+    INSERT INTO task_schedules (id, task_id, day_number, scheduled_time, duration_minutes)
+    VALUES (gen_random_uuid(), ${taskId}, ${dayNumber}, ${scheduledTime}, ${durationMinutes})
+    ON CONFLICT (task_id, day_number)
+    DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time, duration_minutes = EXCLUDED.duration_minutes
+  `;
+}
+
+export async function deleteScheduledTask(scheduledId: string): Promise<void> {
+  await sql`DELETE FROM task_schedules WHERE id = ${scheduledId}`;
+}
+
+export async function updateTaskSchedule(id: string, time?: string, duration?: number): Promise<void> {
+  if (time !== undefined && duration !== undefined) {
+    await sql`UPDATE task_schedules SET scheduled_time = ${time}, duration_minutes = ${duration} WHERE id = ${id}`;
+  } else if (time !== undefined) {
+    await sql`UPDATE task_schedules SET scheduled_time = ${time} WHERE id = ${id}`;
+  } else if (duration !== undefined) {
+    await sql`UPDATE task_schedules SET duration_minutes = ${duration} WHERE id = ${id}`;
+  }
+}
+
+export async function assertScheduledTaskOwnership(scheduledId: string, userId: string): Promise<boolean> {
+  const result = await sql`
+    SELECT 1
+    FROM task_schedules ts
+    JOIN tasks t ON t.id = ts.task_id
+    JOIN sections s ON s.id = t.section_id
+    JOIN plans p ON p.id = s.plan_id
+    WHERE ts.id = ${scheduledId} AND p.user_id = ${userId}
+    LIMIT 1
+  `;
+  return result.rowCount > 0;
 }
 
 export async function assertPlanOwnership(planId: string, userId: string): Promise<boolean> {
@@ -316,6 +372,10 @@ export async function toggleCheckin(taskId: string, dayNumber: number, done: boo
 
 export async function updatePlanDayCount(planId: string, dayCount: 29 | 30): Promise<void> {
   await sql`UPDATE plans SET day_count = ${dayCount} WHERE id = ${planId}`;
+}
+
+export async function updatePlanOffset(planId: string, offset: number): Promise<void> {
+  await sql`UPDATE plans SET ramadan_offset = ${offset} WHERE id = ${planId}`;
 }
 
 export async function reorderSections(planId: string, sectionIds: string[]): Promise<void> {
