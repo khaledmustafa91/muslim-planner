@@ -16,8 +16,8 @@ const amiri = Amiri({
 });
 
 export const metadata: Metadata = {
-  title: "Ramadan Planner | رفيق المسلم",
-  description: "Ramadan planner with dynamic sections and user authentication"
+  title: "Muslim Planner | رفيق المسلم",
+  description: "Muslim planner with dynamic sections and user authentication"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

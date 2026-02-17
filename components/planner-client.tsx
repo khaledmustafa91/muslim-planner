@@ -533,7 +533,7 @@ export function PlannerClient({ username }: { username: string }) {
                 <IconMoon />
               </div>
               <div className="text-right">
-                <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide leading-tight">مخطط رمضان</h1>
+                <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide leading-tight">مخطط المسلم</h1>
                 <div className="flex items-center justify-end gap-2 mt-0.5 text-emerald-100/80">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-xs font-medium">مرحباً، {username}</span>
@@ -707,7 +707,7 @@ export function PlannerClient({ username }: { username: string }) {
 
       <main className="container mx-auto px-4 mt-8 max-w-7xl">
         <div className="print-only text-center mb-10 border-b-4 border-emerald-800 pb-6 dark:text-emerald-100">
-          <h1 className="text-4xl font-bold font-amiri text-emerald-900 dark:text-emerald-100">جدول متابعة رمضان {year}</h1>
+          <h1 className="text-4xl font-bold font-amiri text-emerald-900 dark:text-emerald-100">جدول متابعة المسلم {year}</h1>
           <p className="text-emerald-700 dark:text-emerald-300 mt-2 text-xl font-amiri">"وَفِي ذَلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ"</p>
         </div>
 
