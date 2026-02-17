@@ -366,6 +366,24 @@ export function PlannerClient({ username }: { username: string }) {
     }
   }
 
+  const handleDayCountChange = useCallback(async (d: 29 | 30) => {
+    if (!plan || plan.dayCount === d) return;
+    const previousDayCount = plan.dayCount;
+    // Optimistic update
+    mutate({ ...plan, dayCount: d }, false);
+    try {
+      await api("/api/plan/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ planId: plan.planId, dayCount: d })
+      });
+      await mutate();
+    } catch {
+      // Rollback on failure
+      mutate({ ...plan, dayCount: previousDayCount }, false);
+      setError("تعذر تغيير عدد الأيام");
+    }
+  }, [plan, mutate]);
+
   const yearOptions = useMemo(() => {
     const years = [];
     for (let i = 0; i <= 5; i++) years.push(currentYear + i);
@@ -559,10 +577,10 @@ export function PlannerClient({ username }: { username: string }) {
               </div>
 
               <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50">
-                {[29, 30].map(d => (
+                {([29, 30] as const).map(d => (
                   <button
                     key={d}
-                    onClick={() => { if(plan.dayCount !== d) api("/api/plan/settings", { method: "PATCH", body: JSON.stringify({ planId: plan.planId, dayCount: d }) }).then(() => mutate()); }}
+                    onClick={() => handleDayCountChange(d)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${plan.dayCount === d ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100 hover:bg-emerald-800/50"}`}
                   >
                     {d} يوم
@@ -642,11 +660,11 @@ export function PlannerClient({ username }: { username: string }) {
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] uppercase font-bold text-emerald-200/60 pr-1">عدد الأيام</span>
                   <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50">
-                    {[29, 30].map(d => (
+                    {([29, 30] as const).map(d => (
                       <button
                         key={d}
                         onClick={() => {
-                          if(plan.dayCount !== d) api("/api/plan/settings", { method: "PATCH", body: JSON.stringify({ planId: plan.planId, dayCount: d }) }).then(() => mutate());
+                          handleDayCountChange(d);
                           setIsMenuOpen(false);
                         }}
                         className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all ${plan.dayCount === d ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
