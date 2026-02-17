@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sessionCookieName, verifySessionToken } from "@/lib/auth";
 
-const protectedPaths = ["/"];
+const protectedPaths: string[] = []; // Root is now public (Landing Page)
 const guestOnlyPaths = ["/login", "/signup"];
 
 export async function middleware(request: NextRequest) {
