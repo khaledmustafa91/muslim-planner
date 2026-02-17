@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import useSWR from "swr";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -42,6 +43,14 @@ const IconSun = () => (
 
 const IconDarkMoon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+);
+
+const IconMenu = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+);
+
+const IconClose = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
 );
 
 // --- Helpers ---
@@ -104,10 +113,14 @@ function ThemeToggle() {
 }
 
 export function PlannerClient({ username }: { username: string }) {
+  const router = useRouter();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // SWR handles caching, revalidation, and deduplication
   const { data: plan, error: swrError, mutate, isLoading } = useSWR<PlanResponse>(
@@ -118,6 +131,22 @@ export function PlannerClient({ username }: { username: string }) {
       dedupingInterval: 5000,
     }
   );
+
+  // Handle client-side detection of screen size to avoid hydration mismatch
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Set initial active section on mobile
+  useEffect(() => {
+    if (plan?.sections?.length && !activeSectionId) {
+      const firstSection = [...plan.sections].sort((a, b) => a.order - b.order)[0];
+      setActiveSectionId(firstSection.id);
+    }
+  }, [plan, activeSectionId]);
 
   // --- Modal States ---
   const [modalType, setModalType] = useState<"add-section" | "edit-section" | "add-task" | "edit-task" | "delete-confirm" | "reset-confirm" | null>(null);
@@ -146,6 +175,18 @@ export function PlannerClient({ username }: { username: string }) {
   }, [plan?.dayCount]);
 
   const progress = plan?.progress ?? 0;
+
+  const getSectionProgress = useCallback((section: PlannerSection) => {
+    if (!section.tasks.length) return 0;
+    let completed = 0;
+    for (const task of section.tasks) {
+      for (const day of days) {
+        if (checkins[checkinKey(task.id, day)]) completed++;
+      }
+    }
+    const total = section.tasks.length * days.length;
+    return Math.round((completed / total) * 100);
+  }, [checkins, days]);
 
   // --- Drag and Drop Handlers ---
   const onDragEnd = async (result: DropResult) => {
@@ -222,7 +263,6 @@ export function PlannerClient({ username }: { username: string }) {
         mutate({ ...plan, sections: updatedSections }, false);
 
         try {
-          // Update both sections' tasks
           await Promise.all([
             api("/api/tasks/reorder", {
               method: "POST",
@@ -318,13 +358,8 @@ export function PlannerClient({ username }: { username: string }) {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("فشل تسجيل الخروج");
-
-      // Clear sensitive data from memory (security)
-      setCheckins({});
-      setError(null);
-
-      // Force full page reload to ensure cookie is cleared before next request
-      window.location.href = "/login";
+      router.push("/login");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تسجيل الخروج");
       setSubmitting(false);
@@ -337,30 +372,177 @@ export function PlannerClient({ username }: { username: string }) {
     return years;
   }, [currentYear]);
 
+  const renderTaskView = (section: PlannerSection) => (
+    <Droppable droppableId={section.id} type="task">
+      {(provided) => (
+        <div {...provided.droppableProps} ref={provided.innerRef}>
+          {/* --- Desktop View (Table) --- */}
+          <div className="hidden md:block overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+            <table className="w-full text-right border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
+                  <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">المهمة اليومية</th>
+                  {days.map((d) => (
+                    <th key={d} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {section.tasks
+                  .sort((a, b) => a.order - b.order)
+                  .map((task, idx) => (
+                    <Draggable key={task.id} draggableId={task.id} index={idx}>
+                      {(provided, snapshot) => (
+                        <tr 
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${snapshot.isDragging ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50/30 dark:hover:bg-slate-800/20'}`}
+                        >
+                          <td className="p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 bg-inherit shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">
+                            <div className="flex justify-between items-center gap-4">
+                              <div className="flex items-center gap-3">
+                                <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
+                                  <IconGrip />
+                                </div>
+                                <span className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{idx + 1}</span>
+                                <span className="text-slate-800 dark:text-slate-200 font-medium whitespace-nowrap">{task.title}</span>
+                              </div>
+
+                              <div className="no-print flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-1.5 rounded-md text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all">
+                                  <IconEdit />
+                                </button>
+                                <select
+                                  className="mx-1 px-1 rounded bg-slate-100 dark:bg-slate-800 text-[10px] border-none focus:ring-1 focus:ring-emerald-400 cursor-pointer text-slate-600 dark:text-slate-300"
+                                  value={section.id}
+                                  onChange={(e) => {
+                                    const destId = e.target.value;
+                                    if(destId !== section.id) {
+                                      api(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ sectionId: destId, order: 9999 }) }).then(() => mutate());
+                                    }
+                                  }}
+                                >
+                                  {plan?.sections.map((entry) => (
+                                    <option key={entry.id} value={entry.id}>{entry.title}</option>
+                                  ))}
+                                </select>
+                                <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-1.5 rounded-md text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all">
+                                  <IconTrash />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+
+                          {days.map((day) => {
+                            const done = checkins[checkinKey(task.id, day)] ?? false;
+                            return (
+                              <td key={day} className="p-0 border-l border-slate-50 dark:border-slate-800/50 text-center relative h-12 text-slate-900 dark:text-slate-100">
+                                <div
+                                  onClick={() => toggleTask(task.id, day)}
+                                  className={`checkbox-wrapper w-full h-full flex items-center justify-center cursor-pointer select-none no-print transition-all duration-300 ${done ? "bg-emerald-50/50 dark:bg-emerald-900/10" : "hover:bg-slate-100/50 dark:hover:bg-slate-800/30"}`}
+                                >
+                                  <div className={`w-6 h-6 rounded-md border-2 transition-all flex items-center justify-center ${done ? "bg-emerald-100 dark:bg-emerald-900/50 border-emerald-500 dark:border-emerald-400 scale-110 shadow-sm" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"}`}>
+                                    {done ? <IconCheck /> : null}
+                                  </div>
+                                </div>
+                                <div className="print-only w-full h-full border-l border-slate-300 flex items-center justify-center">
+                                  {done ? <div className="w-3 h-3 bg-slate-800 rounded-sm" /> : null}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
+                    </Draggable>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* --- Mobile View (Task Cards) --- */}
+          <div className="md:hidden space-y-4 p-2">
+            {section.tasks
+              .sort((a, b) => a.order - b.order)
+              .map((task, idx) => (
+                <Draggable key={task.id} draggableId={task.id} index={idx}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-xl scale-[1.02] ring-2 ring-emerald-500' : ''}`}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div {...provided.dragHandleProps} className="p-1">
+                            <IconGrip />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{task.title}</h3>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">المهمة رقم {idx + 1}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            <IconEdit />
+                          </button>
+                          <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500">
+                            <IconTrash />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-6 gap-2">
+                        {days.map((day) => {
+                          const done = checkins[checkinKey(task.id, day)] ?? false;
+                          return (
+                            <div
+                              key={day}
+                              onClick={() => toggleTask(task.id, day)}
+                              className={`flex flex-col items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
+                            >
+                              <span className={`text-[9px] font-bold mb-1 ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{day}</span>
+                              <div className={`w-4 h-4 rounded-sm border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600 scale-110' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
+                                {done ? <IconCheck /> : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+          </div>
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
+
   if (isLoading) return <Skeleton />;
   if (!plan) return <div className="p-10 text-center dark:text-slate-400">لا توجد بيانات لهذه السنة</div>;
 
   return (
     <div className="min-h-screen pb-20 bg-slate-50 dark:bg-slate-950 transition-colors">
-      <header className="bg-emerald-800 dark:bg-emerald-900 text-white py-6 shadow-lg no-print sticky top-0 z-50 transition-colors">
+      <header className="bg-emerald-800 dark:bg-emerald-900 text-white py-4 lg:py-6 shadow-lg no-print sticky top-0 z-50 transition-colors">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+          <div className="flex justify-between items-center">
+            {/* 1. Right Side (First child in RTL): Logo & Title */}
             <div className="flex items-center gap-4">
               <div className="bg-emerald-700 dark:bg-emerald-800 p-2.5 rounded-2xl shadow-inner">
                 <IconMoon />
               </div>
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold font-amiri tracking-wide">رفيق المسلم</h1>
-                <div className="flex items-center gap-2 mt-1 text-emerald-100/80">
+              <div className="text-right">
+                <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide leading-tight">رفيق المسلم</h1>
+                <div className="flex items-center justify-end gap-2 mt-0.5 text-emerald-100/80">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-medium">مرحباً بك، {username}</span>
+                  <span className="text-xs font-medium">مرحباً، {username}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 md:gap-3 items-center justify-center">
-              <ThemeToggle />
-              
+            {/* 2. Middle: Desktop Actions (Hidden on mobile) */}
+            <div className="hidden lg:flex flex-wrap gap-3 items-center">
               <div className="relative group">
                 <select
                   className="appearance-none bg-emerald-900/50 border border-emerald-600 dark:border-emerald-700 text-white rounded-xl pl-10 pr-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer"
@@ -389,6 +571,7 @@ export function PlannerClient({ username }: { username: string }) {
               </div>
 
               <button onClick={() => window.print()} className="bg-emerald-50 dark:bg-slate-800 text-emerald-800 dark:text-emerald-100 px-4 py-2 rounded-xl text-sm font-bold hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
                 طباعة
               </button>
               
@@ -403,7 +586,7 @@ export function PlannerClient({ username }: { username: string }) {
                 onClick={() => setModalType("reset-confirm")} 
                 className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-amber-600 transition-colors shadow-sm flex items-center gap-2"
               >
-                تصفير المتابعة
+                تصفير
               </button>
 
               <button 
@@ -411,10 +594,101 @@ export function PlannerClient({ username }: { username: string }) {
                 disabled={submitting}
                 className="bg-slate-800 dark:bg-slate-950 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 transition-colors disabled:opacity-50"
               >
-                {submitting ? "جاري الخروج..." : "خروج"}
+                {submitting ? "..." : "خروج"}
               </button>
             </div>
+
+            {/* 3. Left Side (Last child in RTL): Theme Toggle & Burger */}
+            <div className="flex items-center gap-2">
+              <div className="hidden lg:block">
+                <ThemeToggle />
+              </div>
+              <div className="lg:hidden">
+                <button
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="p-2 rounded-xl bg-emerald-700 dark:bg-emerald-800 text-white hover:bg-emerald-600 transition-all"
+                  aria-label="Toggle Menu"
+                >
+                  {isMenuOpen ? <IconClose /> : <IconMenu />}
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Mobile Dropdown Menu */}
+          {isMenuOpen && (
+            <div className="lg:hidden mt-4 pt-4 border-t border-emerald-700/50 flex flex-col gap-4 animate-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between bg-emerald-900/20 p-3 rounded-2xl">
+                <span className="text-sm font-bold text-emerald-50">المظهر الداكن</span>
+                <ThemeToggle />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-emerald-200/60 pr-1">السنة</span>
+                  <select
+                    className="w-full bg-emerald-900/50 border border-emerald-600 text-white rounded-xl px-3 py-2 text-sm font-bold focus:outline-none"
+                    value={year}
+                    onChange={(e) => {
+                      setYear(Number(e.target.value));
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    {yearOptions.map(y => (
+                      <option key={y} value={y} className="text-slate-900">{y} هـ / م</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-emerald-200/60 pr-1">عدد الأيام</span>
+                  <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50">
+                    {[29, 30].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => {
+                          if(plan.dayCount !== d) api("/api/plan/settings", { method: "PATCH", body: JSON.stringify({ planId: plan.planId, dayCount: d }) }).then(() => mutate());
+                          setIsMenuOpen(false);
+                        }}
+                        className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all ${plan.dayCount === d ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => { window.print(); setIsMenuOpen(false); }} 
+                  className="bg-emerald-50 text-emerald-800 py-3 rounded-2xl text-sm font-bold shadow-sm"
+                >
+                  طباعة الجدول
+                </button>
+                <button 
+                  onClick={() => { setModalType("add-section"); setModalInputValue(""); setIsMenuOpen(false); }} 
+                  className="bg-emerald-600 text-white py-3 rounded-2xl text-sm font-bold shadow-sm"
+                >
+                  + إضافة قسم
+                </button>
+              </div>
+
+              <button 
+                onClick={() => { setModalType("reset-confirm"); setIsMenuOpen(false); }} 
+                className="bg-amber-500 text-white py-3 rounded-2xl text-sm font-bold shadow-sm"
+              >
+                تصفير المتابعة
+              </button>
+
+              <button 
+                onClick={logout} 
+                disabled={submitting}
+                className="bg-slate-800 dark:bg-slate-950 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-50 shadow-sm"
+              >
+                {submitting ? "جاري الخروج..." : "تسجيل الخروج"}
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 flex flex-col gap-2">
             <div className="flex justify-between items-end mb-1">
@@ -433,9 +707,45 @@ export function PlannerClient({ username }: { username: string }) {
 
       <main className="container mx-auto px-4 mt-8 max-w-7xl">
         <div className="print-only text-center mb-10 border-b-4 border-emerald-800 pb-6 dark:text-emerald-100">
-          <h1 className="text-4xl font-bold font-amiri text-emerald-900 dark:text-emerald-100">جدول متابعة رمضان {year}</h1>
+          <h1 className="text-4xl font-bold font-amiri text-emerald-900 dark:text-emerald-100">جدول متابعة المسلم {year}</h1>
           <p className="text-emerald-700 dark:text-emerald-300 mt-2 text-xl font-amiri">"وَفِي ذَلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ"</p>
         </div>
+
+        {/* --- Mobile Category Dashboard --- */}
+        {isMobile && (
+          <div className="grid grid-cols-2 gap-3 mb-8 no-print">
+            {plan.sections
+              .sort((a, b) => a.order - b.order)
+              .map((section) => {
+                const secProgress = getSectionProgress(section);
+                const isActive = activeSectionId === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => setActiveSectionId(section.id)}
+                    className={`relative p-4 rounded-2xl border transition-all text-right group ${
+                      isActive 
+                        ? 'bg-emerald-600 border-emerald-500 shadow-md ring-2 ring-emerald-500/20' 
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold mb-1 ${isActive ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                      {secProgress}% إنجاز
+                    </div>
+                    <div className={`font-bold text-sm truncate ${isActive ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                      {section.title}
+                    </div>
+                    <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${isActive ? 'bg-amber-400' : 'bg-emerald-50'}`} 
+                        style={{ width: `${secProgress}%` }} 
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        )}
 
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="sections" type="section">
@@ -443,6 +753,13 @@ export function PlannerClient({ username }: { username: string }) {
               <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-8">
                 {plan.sections
                   .sort((a, b) => a.order - b.order)
+                  // On mobile, only show the active section
+                  .filter((section) => {
+                    if (isMobile) {
+                      return activeSectionId ? section.id === activeSectionId : true;
+                    }
+                    return true;
+                  })
                   .map((section, index) => (
                     <Draggable key={section.id} draggableId={section.id} index={index}>
                       {(provided, snapshot) => (
@@ -479,93 +796,7 @@ export function PlannerClient({ username }: { username: string }) {
                             </div>
                           </div>
 
-                          <Droppable droppableId={section.id} type="task">
-                            {(provided) => (
-                              <div {...provided.droppableProps} ref={provided.innerRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-                                <table className="w-full text-right border-collapse">
-                                  <thead>
-                                    <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
-                                      <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black">المهمة اليومية</th>
-                                      {days.map((d) => (
-                                        <th key={d} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">{d}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="text-sm">
-                                    {section.tasks
-                                      .sort((a, b) => a.order - b.order)
-                                      .map((task, idx) => (
-                                        <Draggable key={task.id} draggableId={task.id} index={idx}>
-                                          {(provided, snapshot) => (
-                                            <tr 
-                                              ref={provided.innerRef}
-                                              {...provided.draggableProps}
-                                              className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${snapshot.isDragging ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50/30 dark:hover:bg-slate-800/20'}`}
-                                            >
-                                              <td className="p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 bg-inherit shadow-[4px_0_8px_-4px_rgba(0,0,0,0.05)]">
-                                                <div className="flex justify-between items-center gap-4">
-                                                  <div className="flex items-center gap-3">
-                                                    <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
-                                                      <IconGrip />
-                                                    </div>
-                                                    <span className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{idx + 1}</span>
-                                                    <span className="text-slate-800 dark:text-slate-200 font-medium whitespace-nowrap">{task.title}</span>
-                                                  </div>
-
-                                                  <div className="no-print flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-1.5 rounded-md text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all">
-                                                      <IconEdit />
-                                                    </button>
-                                                    <select
-                                                      className="mx-1 px-1 rounded bg-slate-100 dark:bg-slate-800 text-[10px] border-none focus:ring-1 focus:ring-emerald-400 cursor-pointer text-slate-600 dark:text-slate-300"
-                                                      value={section.id}
-                                                      onChange={(e) => {
-                                                        const destId = e.target.value;
-                                                        if(destId !== section.id) {
-                                                          // Manual move if dropdown used
-                                                          api(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ sectionId: destId, order: 9999 }) }).then(() => mutate());
-                                                        }
-                                                      }}
-                                                    >
-                                                      {plan.sections.map((entry) => (
-                                                        <option key={entry.id} value={entry.id}>{entry.title}</option>
-                                                      ))}
-                                                    </select>
-                                                    <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-1.5 rounded-md text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all">
-                                                      <IconTrash />
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              </td>
-
-                                              {days.map((day) => {
-                                                const done = checkins[checkinKey(task.id, day)] ?? false;
-                                                return (
-                                                  <td key={day} className="p-0 border-l border-slate-50 dark:border-slate-800/50 text-center relative h-12">
-                                                    <div
-                                                      onClick={() => toggleTask(task.id, day)}
-                                                      className={`checkbox-wrapper w-full h-full flex items-center justify-center cursor-pointer select-none no-print transition-all duration-300 ${done ? "bg-emerald-50/50 dark:bg-emerald-900/10" : "hover:bg-slate-100/50 dark:hover:bg-slate-800/30"}`}
-                                                    >
-                                                      <div className={`w-6 h-6 rounded-md border-2 transition-all flex items-center justify-center ${done ? "bg-emerald-100 dark:bg-emerald-900/50 border-emerald-500 dark:border-emerald-400 scale-110 shadow-sm" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"}`}>
-                                                        {done ? <IconCheck /> : null}
-                                                      </div>
-                                                    </div>
-                                                    <div className="print-only w-full h-full border-l border-slate-300 flex items-center justify-center">
-                                                      {done ? <div className="w-3 h-3 bg-slate-800 rounded-sm" /> : null}
-                                                    </div>
-                                                  </td>
-                                                );
-                                              })}
-                                            </tr>
-                                          )}
-                                        </Draggable>
-                                      ))}
-                                    {provided.placeholder}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </Droppable>
+                          {renderTaskView(section)}
                         </section>
                       )}
                     </Draggable>

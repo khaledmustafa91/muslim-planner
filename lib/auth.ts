@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { getAuthSecret } from "@/lib/env";
 import type { SessionPayload } from "@/lib/types";
 
-const SESSION_COOKIE = "ramadan_session";
+const SESSION_COOKIE = "muslim_planner_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 function getSecretKey() {

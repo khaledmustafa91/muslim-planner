@@ -1,11 +1,12 @@
-# Ramadan Planner V1.1
+# Muslim Planner V1.1
 
-Next.js App Router Ramadan planner with:
+Next.js App Router Muslim planner with:
 - Username/password auth
 - Per-user, per-year plans
 - Dynamic sections and tasks
-- Prayer section split into 5 daily prayers
-- Vercel Postgres persistence
+- Fast performance with server-side progress calculation
+- Mobile-first category dashboard
+- Neon/Vercel Postgres persistence
 
 ## 1) Install
 
