@@ -62,6 +62,38 @@ export async function sql<T extends Record<string, any> = any>(
 }
 
 /**
+ * Execute a parameterized SQL query with a plain string and values array.
+ * Use this when the query shape is dynamic (e.g. multi-row inserts).
+ */
+export async function sqlParams<T extends Record<string, any> = any>(
+  query: string,
+  params: unknown[]
+): Promise<SQLResult<T>> {
+  const connectionString = process.env.POSTGRES_URL;
+  if (!connectionString) {
+    throw new Error("POSTGRES_URL is missing. Check your environment variables.");
+  }
+
+  const isLocal = /localhost|127\.0\.0\.1/.test(connectionString);
+
+  try {
+    if (!isLocal) {
+      const neonSql = neon(connectionString);
+      const result = await (neonSql as any).query(query, params);
+      const rows: T[] = result.rows ?? result;
+      return { rows, rowCount: rows.length };
+    } else {
+      if (!pgPool) pgPool = new Pool({ connectionString });
+      const result = await pgPool.query<T>(query, params);
+      return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+    }
+  } catch (error) {
+    console.error("[SQL_PARAMS_ERROR]", { error });
+    throw error;
+  }
+}
+
+/**
  * Execute a raw SQL string without parameter binding.
  * Dangerous: only use for trusted content like migration files.
  */

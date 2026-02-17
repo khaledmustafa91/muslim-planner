@@ -138,6 +138,7 @@ export function PlannerClient({ username }: { username: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: "success" | "info" | "loading"; progress?: number } | null>(null);
+  const [syncProgress, setSyncProgress] = useState<number | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -518,8 +519,8 @@ export function PlannerClient({ username }: { username: string }) {
         })
       });
       await mutate();
-      setModalType(null);
-      
+      setNotification({ message: "تم حفظ الموقع بنجاح", type: "success" });
+
       // Automatically trigger prayer sync in background
       syncPrayers();
     } catch (err) {
@@ -531,29 +532,46 @@ export function PlannerClient({ username }: { username: string }) {
 
   async function syncPrayers() {
     if (!plan || (!locationForm.city && !plan.locationCity)) return;
-    
-    setNotification({ message: "جاري مزامنة أوقات الصلاة في الخلفية...", type: "loading" });
-    
+
+    setSyncProgress(0);
+    setNotification(null);
+
     try {
-      const res = await api<{ ok: true, syncedCount: number }>("/api/plan/sync-prayers", {
+      const res = await fetch("/api/plan/sync-prayers", {
         method: "POST",
-        body: JSON.stringify({ 
-          planId: plan.planId, 
-          year 
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: plan.planId, year }),
       });
-      
-      await mutate();
-      setNotification({ message: `تمت مزامنة ${res.syncedCount} موعد صلاة بنجاح`, type: "success" });
-      
-      setTimeout(() => {
-        setNotification(prev => prev?.type === "success" ? null : prev);
-      }, 5000);
-      
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const lines = decoder.decode(value).split("\n").filter(l => l.startsWith("data: "));
+        for (const line of lines) {
+          const event = JSON.parse(line.slice(6));
+          if (event.step && event.total) {
+            setSyncProgress(Math.round((event.step / event.total) * 100));
+          }
+          if (event.done) {
+            setSyncProgress(100);
+            await mutate();
+            setNotification({ message: `تمت مزامنة ${event.syncedCount} موعد صلاة بنجاح`, type: "success" });
+            setTimeout(() => setNotification(prev => prev?.type === "success" ? null : prev), 5000);
+          }
+          if (event.error) {
+            setNotification({ message: event.error, type: "info" });
+          }
+        }
+      }
     } catch (err) {
       console.error("Sync error:", err);
-      setNotification({ message: "فشل مزامنة أوقات الصلاة تلقائياً", type: "info" });
-      setTimeout(() => setNotification(null), 5000);
+      setNotification({ message: "فشل مزامنة أوقات الصلاة", type: "info" });
+    } finally {
+      setSyncProgress(null);
     }
   }
 
@@ -1393,20 +1411,38 @@ export function PlannerClient({ username }: { username: string }) {
                 </select>
               </div>
 
+              {syncProgress !== null && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>جاري المزامنة...</span>
+                    <span>{syncProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${syncProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={handleLocationUpdate}
                   disabled={submitting || !locationForm.city || !locationForm.country}
                   className="flex-1 bg-slate-800 text-white py-3 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all disabled:opacity-50"
                 >
                   حفظ الموقع
                 </button>
-                <button 
+                <button
                   onClick={syncPrayers}
-                  disabled={submitting || !plan?.locationCity}
+                  disabled={submitting || !plan?.locationCity || syncProgress !== null}
                   className="flex-[2] bg-emerald-600 text-white py-3 rounded-xl text-xs font-black hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  {syncProgress !== null ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  )}
                   مزامنة أوقات الصلاة
                 </button>
               </div>

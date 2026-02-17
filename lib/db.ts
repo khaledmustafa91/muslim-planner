@@ -1,4 +1,4 @@
-import { sql } from "@/lib/sql";
+import { sql, sqlParams } from "@/lib/sql";
 import { defaultSections } from "@/lib/default-plan";
 import type { PlanResponse, PlannerCheckin, PlannerSection, ScheduledTask } from "@/lib/types";
 
@@ -214,6 +214,27 @@ export async function scheduleTask(taskId: string, dayNumber: number, scheduledT
     ON CONFLICT (task_id, day_number)
     DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time, duration_minutes = EXCLUDED.duration_minutes
   `;
+}
+
+export async function scheduleTasksBatch(
+  rows: { taskId: string; dayNumber: number; time: string; duration: number }[]
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  const valuePlaceholders = rows.map((_, i) => {
+    const base = i * 4;
+    return `(gen_random_uuid(), $${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+  }).join(", ");
+
+  const params = rows.flatMap(r => [r.taskId, r.dayNumber, r.time, r.duration]);
+
+  await sqlParams(
+    `INSERT INTO task_schedules (id, task_id, day_number, scheduled_time, duration_minutes)
+     VALUES ${valuePlaceholders}
+     ON CONFLICT (task_id, day_number)
+     DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time, duration_minutes = EXCLUDED.duration_minutes`,
+    params
+  );
 }
 
 export async function deleteScheduledTask(scheduledId: string): Promise<void> {
