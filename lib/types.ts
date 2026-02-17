@@ -38,6 +38,7 @@ export interface PlanResponse {
   ramadanOffset: number;
   sections: PlannerSection[];
   checkins: PlannerCheckin[];
+  scheduledTasks: ScheduledTask[];
   progress: number; // 0-100 percentage
 }
 
