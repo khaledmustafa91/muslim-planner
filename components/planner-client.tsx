@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
+import { SearchableSelect } from "./ui/searchable-select";
 import { getRamadanDays } from "@/lib/date-utils";
 import { CalendarView } from "./calendar-view";
 
@@ -136,6 +137,8 @@ export function PlannerClient({ username }: { username: string }) {
   const [year, setYear] = useState<number>(currentYear);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "info" | "loading"; progress?: number } | null>(null);
+  const [syncProgress, setSyncProgress] = useState<number | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -151,6 +154,65 @@ export function PlannerClient({ username }: { username: string }) {
     time: "00:00"
   });
 
+  const [locationForm, setLocationForm] = useState({
+    city: "",
+    country: "",
+    method: 2
+  });
+
+  const [countries, setCountries] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [loadingGeo, setLoadingGeo] = useState({ countries: false, cities: false });
+
+  // Fetch Countries on Mount
+  useEffect(() => {
+    async function fetchCountries() {
+      setLoadingGeo(prev => ({ ...prev, countries: true }));
+      try {
+        const res = await fetch("https://countriesnow.space/api/v0.1/countries/iso");
+        const data = await res.json();
+        if (!data.error) {
+          setCountries(data.data.map((c: any) => c.name).sort());
+        }
+      } catch (err) {
+        console.error("Failed to fetch countries", err);
+      } finally {
+        setLoadingGeo(prev => ({ ...prev, countries: false }));
+      }
+    }
+    fetchCountries();
+  }, []);
+
+  // Fetch Cities when Country changes
+  useEffect(() => {
+    async function fetchCities() {
+      if (!locationForm.country) {
+        setCities([]);
+        return;
+      }
+      setLoadingGeo(prev => ({ ...prev, cities: true }));
+      try {
+        const res = await fetch("https://countriesnow.space/api/v0.1/countries/cities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ country: locationForm.country })
+        });
+        const data = await res.json();
+        if (!data.error) {
+          setCities(data.data.sort());
+        } else {
+          setCities([]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch cities", err);
+        setCities([]);
+      } finally {
+        setLoadingGeo(prev => ({ ...prev, cities: false }));
+      }
+    }
+    fetchCities();
+  }, [locationForm.country]);
+
   // SWR handles caching, revalidation, and deduplication
   const { data: plan, error: swrError, mutate, isLoading } = useSWR<PlanResponse>(
     `/api/plan?year=${year}`,
@@ -164,6 +226,17 @@ export function PlannerClient({ username }: { username: string }) {
   const ramadanDays = useMemo(() => {
     return getRamadanDays(year, plan?.ramadanOffset ?? 0).slice(0, plan?.dayCount ?? 30);
   }, [year, plan?.dayCount, plan?.ramadanOffset]);
+
+  // Sync location form with plan data
+  useEffect(() => {
+    if (plan) {
+      setLocationForm({
+        city: plan.locationCity || "",
+        country: plan.locationCountry || "",
+        method: plan.calculationMethod || 2
+      });
+    }
+  }, [plan]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -341,9 +414,16 @@ export function PlannerClient({ username }: { username: string }) {
         method: "POST",
         body: JSON.stringify({ taskId, dayNumber: day, done: next })
       });
-      await mutate();
+      if (plan) {
+        const exists = plan.checkins.some(c => c.taskId === taskId && c.dayNumber === day);
+        const newCheckins = exists
+          ? plan.checkins.map(c => c.taskId === taskId && c.dayNumber === day ? { ...c, done: next } : c)
+          : [...plan.checkins, { taskId, dayNumber: day, done: next }];
+        mutate({ ...plan, checkins: newCheckins }, false);
+      }
     } catch {
       setCheckins((prev) => ({ ...prev, [key]: !next }));
+      if (plan) mutate(plan, false);
       setError("تعذر حفظ التغيير");
     }
   }
@@ -422,6 +502,76 @@ export function PlannerClient({ username }: { username: string }) {
     } catch {
       mutate();
       setError("تعذر تحديث مدة المهمة");
+    }
+  }
+
+  async function handleLocationUpdate() {
+    if (!plan || !locationForm.city || !locationForm.country) return;
+    setSubmitting(true);
+    try {
+      await api("/api/plan/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          planId: plan.planId,
+          locationCity: locationForm.city,
+          locationCountry: locationForm.country,
+          calculationMethod: locationForm.method
+        })
+      });
+      await mutate();
+      setNotification({ message: "تم حفظ الموقع بنجاح", type: "success" });
+
+      // Automatically trigger prayer sync in background
+      syncPrayers();
+    } catch (err) {
+      setError("تعذر تحديث بيانات الموقع");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function syncPrayers() {
+    if (!plan || (!locationForm.city && !plan.locationCity)) return;
+
+    setSyncProgress(0);
+    setNotification(null);
+
+    try {
+      const res = await fetch("/api/plan/sync-prayers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: plan.planId, year }),
+      });
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const lines = decoder.decode(value).split("\n").filter(l => l.startsWith("data: "));
+        for (const line of lines) {
+          const event = JSON.parse(line.slice(6));
+          if (event.step && event.total) {
+            setSyncProgress(Math.round((event.step / event.total) * 100));
+          }
+          if (event.done) {
+            setSyncProgress(100);
+            await mutate();
+            setNotification({ message: `تمت مزامنة ${event.syncedCount} موعد صلاة بنجاح`, type: "success" });
+            setTimeout(() => setNotification(prev => prev?.type === "success" ? null : prev), 5000);
+          }
+          if (event.error) {
+            setNotification({ message: event.error, type: "info" });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Sync error:", err);
+      setNotification({ message: "فشل مزامنة أوقات الصلاة", type: "info" });
+    } finally {
+      setSyncProgress(null);
     }
   }
 
@@ -898,7 +1048,7 @@ export function PlannerClient({ username }: { username: string }) {
               </div>
             </div>
             
-            {(viewMode === "tracker" || isMobile) && (
+            {viewMode === "tracker" && (
               <div className="mt-6 pb-4 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3">
                 {ramadanDays.map(d => (
                   <button
@@ -916,9 +1066,11 @@ export function PlannerClient({ username }: { username: string }) {
                     <span className="text-xl font-black leading-none mb-1">
                       {d.dayNumber}
                     </span>
-                    <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
-                      {d.formattedGregorian}
-                    </span>
+                    {!isScrolled && (
+                      <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
+                        {d.formattedGregorian}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -947,6 +1099,27 @@ export function PlannerClient({ username }: { username: string }) {
           <h1 className="text-4xl font-bold font-amiri text-emerald-900 dark:text-emerald-100">جدول متابعة رمضان {year}</h1>
           <p className="text-emerald-700 dark:text-emerald-300 mt-2 text-xl font-amiri">"وَفِي ذَلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ"</p>
         </div>
+
+        {/* Location Warning Banner (Global) */}
+        {!plan.locationCity && (
+          <div className="mb-8 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 p-4 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-500 no-print">
+            <div className="flex items-center gap-3 text-right">
+              <div className="bg-amber-100 dark:bg-amber-800 p-2 rounded-xl text-amber-600 dark:text-amber-400">
+                <IconClock />
+              </div>
+              <div>
+                <h4 className="font-bold text-amber-900 dark:text-amber-100 text-sm">لم يتم تحديد الموقع بعد</h4>
+                <p className="text-amber-700/70 dark:text-amber-400/60 text-xs font-medium">قم بتحديد مدينتك في الإعدادات لتتمكن من إضافة أوقات الصلاة تلقائياً.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setModalType("plan-settings")}
+              className="bg-amber-500 text-white px-5 py-2 rounded-xl text-xs font-black hover:bg-amber-600 transition-all shadow-md shrink-0"
+            >
+              فتح الإعدادات
+            </button>
+          </div>
+        )}
 
         {viewMode === "checklist" ? (
           <>
@@ -1075,30 +1248,32 @@ export function PlannerClient({ username }: { username: string }) {
             <div className="relative border-r-2 border-emerald-100 dark:border-emerald-900/50 pr-8 mr-4 space-y-6 py-4">
               {plan.scheduledTasks
                 .filter(t => t.dayNumber === selectedDay)
-                .map((task) => (
+                .map((task) => {
+                  const isDone = !!checkins[checkinKey(task.taskId, selectedDay)];
+                  return (
                 <div key={task.id} className="relative group">
                   <div className="absolute -right-[41px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-500 border-4 border-white dark:border-slate-950 shadow-sm z-10" />
                   <div className={`p-4 md:p-6 rounded-3xl border transition-all flex items-center justify-between gap-4 ${
-                    task.done 
-                      ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50" 
+                    isDone
+                      ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50"
                       : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md"
                   }`}>
                     <div className="flex items-center gap-4 flex-1">
                       <div className={`text-sm font-black px-3 py-1.5 rounded-xl ${
-                        task.done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        isDone ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
                       }`}>
                         {task.scheduledTime}
                       </div>
                       <div
                         onClick={() => toggleTask(task.taskId, selectedDay)}
                         className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${
-                          task.done ? "bg-emerald-500 border-emerald-600 shadow-inner" : "bg-white dark:bg-slate-800 border-slate-200"
+                          isDone ? "bg-emerald-500 border-emerald-600 shadow-inner" : "bg-white dark:bg-slate-800 border-slate-200"
                         }`}
                       >
-                        {task.done && <IconCheck />}
+                        {isDone && <IconCheck />}
                       </div>
                       <div>
-                        <h3 className={`font-bold ${task.done ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>
+                        <h3 className={`font-bold ${isDone ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>
                           {task.title}
                         </h3>
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">{task.sectionTitle}</span>
@@ -1112,7 +1287,7 @@ export function PlannerClient({ username }: { username: string }) {
                     </button>
                   </div>
                 </div>
-              ))}
+              ); })}
 
               {plan.scheduledTasks.length === 0 && (
                 <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
@@ -1147,13 +1322,14 @@ export function PlannerClient({ username }: { username: string }) {
           modalType === "add-task" ? "إضافة مهمة جديدة" :
           modalType === "edit-task" ? "تعديل المهمة" :
           modalType === "reset-confirm" ? "تصفير المتابعة" :
+          modalType === "plan-settings" ? "إعدادات الخطة" :
           "تأكيد الحذف"
         }
       >
         {modalType === "plan-settings" ? (
           <div className="space-y-6">
             <div className="space-y-3">
-              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">طول شهر رمضان</label>
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">مده شهر رمضان</label>
               <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
                 {([29, 30] as const).map(d => (
                   <button
@@ -1191,6 +1367,87 @@ export function PlannerClient({ username }: { username: string }) {
               </div>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed mt-2 text-center">
                 استخدم هذا الخيار إذا كانت بداية رمضان في بلدك تختلف عن الحساب الفلكي الافتراضي.
+              </p>
+            </div>
+
+            {/* Prayer Times Location Settings */}
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <IconClock /> أوقات الصلاة التلقائية
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <SearchableSelect 
+                  label="الدولة"
+                  placeholder="اختر الدولة..."
+                  options={countries}
+                  value={locationForm.country}
+                  loading={loadingGeo.countries}
+                  onChange={(val) => setLocationForm(prev => ({ ...prev, country: val, city: "" }))}
+                />
+                <SearchableSelect 
+                  label="المدينة"
+                  placeholder="اختر المدينة..."
+                  options={cities}
+                  value={locationForm.city}
+                  loading={loadingGeo.cities}
+                  disabled={!locationForm.country}
+                  onChange={(val) => setLocationForm(prev => ({ ...prev, city: val }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase pr-1">طريقة الحساب</label>
+                <select 
+                  className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl px-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                  value={locationForm.method}
+                  onChange={e => setLocationForm(prev => ({ ...prev, method: Number(e.target.value) }))}
+                >
+                  <option value={2}>رابطة العالم الإسلامي</option>
+                  <option value={3}>الهيئة العامة المصرية للمساحة</option>
+                  <option value={4}>جامعة أم القرى، مكة المكرمة</option>
+                  <option value={5}>الاتحاد الإسلامي في أمريكا الشمالية (ISNA)</option>
+                  <option value={1}>جامعة العلوم الإسلامية، كراتشي</option>
+                </select>
+              </div>
+
+              {syncProgress !== null && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>جاري المزامنة...</span>
+                    <span>{syncProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${syncProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleLocationUpdate}
+                  disabled={submitting || !locationForm.city || !locationForm.country}
+                  className="flex-1 bg-slate-800 text-white py-3 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all disabled:opacity-50"
+                >
+                  حفظ الموقع
+                </button>
+                <button
+                  onClick={syncPrayers}
+                  disabled={submitting || !plan?.locationCity || syncProgress !== null}
+                  className="flex-[2] bg-emerald-600 text-white py-3 rounded-xl text-xs font-black hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {syncProgress !== null ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  )}
+                  مزامنة أوقات الصلاة
+                </button>
+              </div>
+              <p className="text-[9px] text-slate-400 text-center leading-relaxed">
+                * سيتم توزيع الصلوات على الـ 30 يوماً تلقائياً بناءً على موقعك.
               </p>
             </div>
 
@@ -1367,6 +1624,33 @@ export function PlannerClient({ username }: { username: string }) {
           </div>
         </div>
       </Modal>
+
+      {/* --- Notification Toast --- */}
+      {notification && (
+        <div className={`fixed bottom-6 left-6 z-[200] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 duration-300 ${
+          notification.type === "success" ? "bg-emerald-600 text-white" : 
+          notification.type === "loading" ? "bg-slate-800 text-white" :
+          "bg-amber-500 text-white"
+        }`}>
+          {notification.type === "loading" ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : notification.type === "success" ? (
+            <div className="bg-white/20 p-1 rounded-full">
+              <IconCheck />
+            </div>
+          ) : (
+            <div className="bg-white/20 p-1 rounded-full">
+              <IconClock />
+            </div>
+          )}
+          <span className="font-bold text-sm">{notification.message}</span>
+          {notification.type !== "loading" && (
+            <button onClick={() => setNotification(null)} className="text-white/60 hover:text-white ml-2">
+               <IconClose />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* --- Error Toast --- */}
       {error && (

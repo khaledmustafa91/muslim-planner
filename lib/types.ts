@@ -36,6 +36,9 @@ export interface PlanResponse {
   ramadanYear: number;
   dayCount: 29 | 30;
   ramadanOffset: number;
+  locationCity?: string;
+  locationCountry?: string;
+  calculationMethod?: number;
   sections: PlannerSection[];
   checkins: PlannerCheckin[];
   scheduledTasks: ScheduledTask[];

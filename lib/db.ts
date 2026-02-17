@@ -1,4 +1,4 @@
-import { sql } from "@/lib/sql";
+import { sql, sqlParams } from "@/lib/sql";
 import { defaultSections } from "@/lib/default-plan";
 import type { PlanResponse, PlannerCheckin, PlannerSection, ScheduledTask } from "@/lib/types";
 
@@ -103,8 +103,14 @@ export async function getPlanProgress(planId: string): Promise<number> {
 export async function getPlanByYear(userId: string, ramadanYear: number): Promise<PlanResponse> {
   const planId = await getOrCreatePlan(userId, ramadanYear);
 
-  const planRow = await sql<{ day_count: 29 | 30; ramadan_offset: number }>`
-    SELECT day_count, ramadan_offset
+  const planRow = await sql<{ 
+    day_count: 29 | 30; 
+    ramadan_offset: number;
+    location_city: string | null;
+    location_country: string | null;
+    calculation_method: number | null;
+  }>`
+    SELECT day_count, ramadan_offset, location_city, location_country, calculation_method
     FROM plans
     WHERE id = ${planId} AND user_id = ${userId}
     LIMIT 1
@@ -191,6 +197,9 @@ export async function getPlanByYear(userId: string, ramadanYear: number): Promis
     ramadanYear,
     dayCount: planRow.rows[0].day_count,
     ramadanOffset: planRow.rows[0].ramadan_offset,
+    locationCity: planRow.rows[0].location_city ?? undefined,
+    locationCountry: planRow.rows[0].location_country ?? undefined,
+    calculationMethod: planRow.rows[0].calculation_method ?? undefined,
     sections: [...sectionsMap.values()],
     checkins: checkinRows.rows,
     progress,
@@ -205,6 +214,27 @@ export async function scheduleTask(taskId: string, dayNumber: number, scheduledT
     ON CONFLICT (task_id, day_number)
     DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time, duration_minutes = EXCLUDED.duration_minutes
   `;
+}
+
+export async function scheduleTasksBatch(
+  rows: { taskId: string; dayNumber: number; time: string; duration: number }[]
+): Promise<void> {
+  if (rows.length === 0) return;
+
+  const valuePlaceholders = rows.map((_, i) => {
+    const base = i * 4;
+    return `(gen_random_uuid(), $${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+  }).join(", ");
+
+  const params = rows.flatMap(r => [r.taskId, r.dayNumber, r.time, r.duration]);
+
+  await sqlParams(
+    `INSERT INTO task_schedules (id, task_id, day_number, scheduled_time, duration_minutes)
+     VALUES ${valuePlaceholders}
+     ON CONFLICT (task_id, day_number)
+     DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time, duration_minutes = EXCLUDED.duration_minutes`,
+    params
+  );
 }
 
 export async function deleteScheduledTask(scheduledId: string): Promise<void> {
@@ -376,6 +406,14 @@ export async function updatePlanDayCount(planId: string, dayCount: 29 | 30): Pro
 
 export async function updatePlanOffset(planId: string, offset: number): Promise<void> {
   await sql`UPDATE plans SET ramadan_offset = ${offset} WHERE id = ${planId}`;
+}
+
+export async function updatePlanLocation(planId: string, city: string, country: string, method: number): Promise<void> {
+  await sql`
+    UPDATE plans 
+    SET location_city = ${city}, location_country = ${country}, calculation_method = ${method} 
+    WHERE id = ${planId}
+  `;
 }
 
 export async function reorderSections(planId: string, sectionIds: string[]): Promise<void> {
