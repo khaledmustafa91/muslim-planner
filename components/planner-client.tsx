@@ -566,17 +566,23 @@ export function PlannerClient({ username }: { username: string }) {
                         </div>
 
                         <div className="grid grid-cols-6 gap-2">
-                          {days.map((day) => {
+                          {ramadanDays.map((d) => {
+                            const day = d.dayNumber;
                             const done = checkins[checkinKey(task.id, day)] ?? false;
                             return (
                               <div
                                 key={day}
                                 onClick={() => toggleTask(task.id, day)}
-                                className={`flex flex-col items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
+                                className={`flex flex-col items-center justify-center p-1 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
                               >
-                                <span className={`text-[9px] font-bold mb-1 ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{day}</span>
-                                <div className={`w-4 h-4 rounded-sm border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600 scale-110' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
-                                  {done ? <IconCheck /> : null}
+                                <span className={`text-[9px] font-black leading-none ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>{day}</span>
+                                <span className={`text-[6px] font-bold mt-0.5 opacity-60 leading-none ${done ? 'text-emerald-600' : 'text-slate-400'}`}>{d.formattedGregorian}</span>
+                                <div className={`w-3 h-3 mt-1 rounded-[3px] border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
+                                  {done ? (
+                                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="5">
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  ) : null}
                                 </div>
                               </div>
                             );
@@ -601,16 +607,17 @@ export function PlannerClient({ username }: { username: string }) {
               {...provided.droppableProps}
               ref={provided.innerRef}
               className="w-full text-right border-collapse"
-              style={{ minWidth: `${260 + days.length * 36}px` }}
+              style={{ minWidth: `${260 + ramadanDays.length * 48}px` }}
             >
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
                   <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">المهمة اليومية</th>
                   {ramadanDays.map((d) => (
-                    <th key={d.dayNumber} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px]">{d.dayNumber}</span>
-                        <span className="text-[8px] opacity-50 font-medium">{d.formattedGregorian}</span>
+                    <th key={d.dayNumber} className="p-2 min-w-[48px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[12px] text-slate-900 dark:text-slate-100 font-black leading-none">{d.dayNumber}</span>
+                        <div className="h-px w-4 bg-slate-200 dark:bg-slate-700 my-0.5" />
+                        <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold whitespace-nowrap leading-none">{d.formattedGregorian}</span>
                       </div>
                     </th>
                   ))}
