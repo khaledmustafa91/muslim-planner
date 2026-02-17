@@ -533,7 +533,7 @@ export function PlannerClient({ username }: { username: string }) {
                 <IconMoon />
               </div>
               <div className="text-right">
-                <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide leading-tight">مخطط المسلم</h1>
+                <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide leading-tight">رفيق المسلم</h1>
                 <div className="flex items-center justify-end gap-2 mt-0.5 text-emerald-100/80">
                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-xs font-medium">مرحباً، {username}</span>
