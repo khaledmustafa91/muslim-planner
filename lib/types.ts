@@ -27,6 +27,7 @@ export interface ScheduledTask {
   sectionTitle: string;
   scheduledTime: string;
   dayNumber: number;
+  durationMinutes: number;
   done: boolean;
 }
 

@@ -13,7 +13,6 @@ export const defaultSections: SeedSection[] = [
       { title: "المغرب", type: "prayer" },
       { title: "العشاء", type: "prayer" },
       { title: "السنن الرواتب (12 ركعة)" },
-
     ]
   },
   {

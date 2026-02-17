@@ -8,6 +8,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea
 import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
 import { getRamadanDays } from "@/lib/date-utils";
+import { CalendarView } from "./calendar-view";
 
 // --- Icons ---
 const IconCheck = () => (
@@ -139,6 +140,7 @@ export function PlannerClient({ username }: { username: string }) {
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"checklist" | "tracker">("checklist");
+  const [trackerMode, setTrackerMode] = useState<"timeline" | "calendar">("calendar");
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [trackerForm, setTrackerForm] = useState({
@@ -347,7 +349,8 @@ export function PlannerClient({ username }: { username: string }) {
         method: "POST",
         body: JSON.stringify({
           ...trackerForm,
-          dayNumber: selectedDay
+          dayNumber: selectedDay,
+          duration: 30 // Default duration
         })
       });
       setTrackerModalOpen(false);
@@ -366,6 +369,50 @@ export function PlannerClient({ username }: { username: string }) {
       await mutate();
     } catch (err) {
       setError("تعذر حذف المهمة من الجدول");
+    }
+  }
+
+  async function handleTaskMove(id: string, newTime: string) {
+    // Optimistic Update
+    const oldTask = plan?.scheduledTasks.find(t => t.id === id);
+    if (!oldTask || !plan) return;
+
+    const newTasks = plan.scheduledTasks.map(t => 
+      t.id === id ? { ...t, scheduledTime: newTime } : t
+    );
+    mutate({ ...plan, scheduledTasks: newTasks }, false);
+
+    try {
+      await api("/api/daily-tracker", {
+        method: "PATCH",
+        body: JSON.stringify({ id, time: newTime })
+      });
+      await mutate();
+    } catch {
+      mutate();
+      setError("تعذر تحديث وقت المهمة");
+    }
+  }
+
+  async function handleTaskResize(id: string, newDuration: number) {
+    // Optimistic Update
+    const oldTask = plan?.scheduledTasks.find(t => t.id === id);
+    if (!oldTask || !plan) return;
+
+    const newTasks = plan.scheduledTasks.map(t => 
+      t.id === id ? { ...t, durationMinutes: newDuration } : t
+    );
+    mutate({ ...plan, scheduledTasks: newTasks }, false);
+
+    try {
+      await api("/api/daily-tracker", {
+        method: "PATCH",
+        body: JSON.stringify({ id, duration: newDuration })
+      });
+      await mutate();
+    } catch {
+      mutate();
+      setError("تعذر تحديث مدة المهمة");
     }
   }
 
@@ -982,7 +1029,7 @@ export function PlannerClient({ username }: { username: string }) {
           </>
         ) : (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3">
                 <span className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-xl text-amber-600 dark:text-amber-400">
                    <IconClock />
@@ -996,14 +1043,46 @@ export function PlannerClient({ username }: { username: string }) {
                   </span>
                 )}
               </h2>
-              <button
-                onClick={() => setTrackerModalOpen(true)}
-                className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
-              >
-                <IconPlus /> إضافة نشاط للجدول
-              </button>
+              
+              <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start md:self-auto">
+                <button
+                  onClick={() => setTrackerMode("calendar")}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${trackerMode === "calendar" ? "bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"}`}
+                >
+                  تقويم
+                </button>
+                <button
+                  onClick={() => setTrackerMode("timeline")}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${trackerMode === "timeline" ? "bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"}`}
+                >
+                  قائمة
+                </button>
+              </div>
+
+              {trackerMode === "timeline" && (
+                <button
+                  onClick={() => setTrackerModalOpen(true)}
+                  className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
+                >
+                  <IconPlus /> إضافة نشاط للجدول
+                </button>
+              )}
             </div>
 
+            {trackerMode === "calendar" ? (
+              <CalendarView 
+                tasks={plan.scheduledTasks.filter(t => t.dayNumber === selectedDay)}
+                onTaskClick={() => {}}
+                onTaskMove={(id, time) => handleTaskMove(id, time)}
+                onTaskResize={(id, duration) => handleTaskResize(id, duration)}
+                onEmptySlotClick={(time) => {
+                  setTrackerForm(prev => ({ ...prev, time, taskId: "", title: "", sectionId: "" }));
+                  setTrackerModalOpen(true);
+                }}
+                onDeleteTask={deleteScheduled}
+                onToggleCheck={(taskId) => toggleTask(taskId, selectedDay)}
+              />
+            ) : (
             <div className="relative border-r-2 border-emerald-100 dark:border-emerald-900/50 pr-8 mr-4 space-y-6 py-4">
               {plan.scheduledTasks
                 .filter(t => t.dayNumber === selectedDay)
@@ -1056,6 +1135,7 @@ export function PlannerClient({ username }: { username: string }) {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 

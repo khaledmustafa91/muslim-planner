@@ -176,6 +176,7 @@ export async function getPlanByYear(userId: string, ramadanYear: number): Promis
       s.title AS "sectionTitle", 
       ts.scheduled_time AS "scheduledTime",
       ts.day_number AS "dayNumber",
+      ts.duration_minutes AS "durationMinutes",
       COALESCE(c.done, false) AS done
     FROM task_schedules ts
     JOIN tasks t ON t.id = ts.task_id
@@ -197,17 +198,27 @@ export async function getPlanByYear(userId: string, ramadanYear: number): Promis
   };
 }
 
-export async function scheduleTask(taskId: string, dayNumber: number, scheduledTime: string): Promise<void> {
+export async function scheduleTask(taskId: string, dayNumber: number, scheduledTime: string, durationMinutes: number = 30): Promise<void> {
   await sql`
-    INSERT INTO task_schedules (id, task_id, day_number, scheduled_time)
-    VALUES (gen_random_uuid(), ${taskId}, ${dayNumber}, ${scheduledTime})
+    INSERT INTO task_schedules (id, task_id, day_number, scheduled_time, duration_minutes)
+    VALUES (gen_random_uuid(), ${taskId}, ${dayNumber}, ${scheduledTime}, ${durationMinutes})
     ON CONFLICT (task_id, day_number)
-    DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time
+    DO UPDATE SET scheduled_time = EXCLUDED.scheduled_time, duration_minutes = EXCLUDED.duration_minutes
   `;
 }
 
 export async function deleteScheduledTask(scheduledId: string): Promise<void> {
   await sql`DELETE FROM task_schedules WHERE id = ${scheduledId}`;
+}
+
+export async function updateTaskSchedule(id: string, time?: string, duration?: number): Promise<void> {
+  if (time !== undefined && duration !== undefined) {
+    await sql`UPDATE task_schedules SET scheduled_time = ${time}, duration_minutes = ${duration} WHERE id = ${id}`;
+  } else if (time !== undefined) {
+    await sql`UPDATE task_schedules SET scheduled_time = ${time} WHERE id = ${id}`;
+  } else if (duration !== undefined) {
+    await sql`UPDATE task_schedules SET duration_minutes = ${duration} WHERE id = ${id}`;
+  }
 }
 
 export async function assertScheduledTaskOwnership(scheduledId: string, userId: string): Promise<boolean> {

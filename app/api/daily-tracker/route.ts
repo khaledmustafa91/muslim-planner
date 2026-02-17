@@ -1,14 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth";
 import { badRequest } from "@/lib/validation";
-import { scheduleTask, createTask, assertSectionOwnership, assertTaskOwnership, deleteScheduledTask, assertScheduledTaskOwnership } from "@/lib/db";
+import { scheduleTask, createTask, assertSectionOwnership, assertTaskOwnership, deleteScheduledTask, assertScheduledTaskOwnership, updateTaskSchedule } from "@/lib/db";
+
+export async function PATCH(request: NextRequest) {
+  const session = await getSessionFromCookies();
+  if (!session) return badRequest("غير مصرح", 401);
+
+  const body = await request.json().catch(() => ({}));
+  const { id, time, duration } = body;
+
+  if (!id) return badRequest("معرف غير صالح");
+
+  try {
+    const owned = await assertScheduledTaskOwnership(id, session.userId);
+    if (!owned) return badRequest("غير مصرح", 403);
+
+    await updateTaskSchedule(id, time, duration);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[TRACKER_PATCH_ERROR]", error);
+    return badRequest("تعذر تحديث المهمة");
+  }
+}
 
 export async function POST(request: NextRequest) {
   const session = await getSessionFromCookies();
   if (!session) return badRequest("غير مصرح", 401);
 
   const body = await request.json().catch(() => ({}));
-  const { taskId, sectionId, title, dayNumber, time } = body;
+  const { taskId, sectionId, title, dayNumber, time, duration } = body;
 
   if (!dayNumber || !time) return badRequest("البيانات ناقصة");
 
@@ -29,7 +50,7 @@ export async function POST(request: NextRequest) {
       if (!ownership) return badRequest("غير مصرح", 403);
     }
 
-    await scheduleTask(finalTaskId, dayNumber, time);
+    await scheduleTask(finalTaskId, dayNumber, time, duration || 30);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[TRACKER_POST_ERROR]", error);
