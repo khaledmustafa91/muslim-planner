@@ -390,13 +390,84 @@ export function PlannerClient({ username }: { username: string }) {
     return years;
   }, [currentYear]);
 
-  const renderTaskView = (section: PlannerSection) => (
-    <Droppable droppableId={section.id} type="task">
-      {(provided) => (
-        <div {...provided.droppableProps} ref={provided.innerRef}>
-          {/* --- Desktop View (Table) --- */}
+  const renderTaskView = (section: PlannerSection) => {
+    if (isMobile) {
+      return (
+        <Droppable droppableId={section.id} type="task">
+          {(provided) => (
+            <div
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="space-y-4 p-2"
+            >
+              {section.tasks
+                .sort((a, b) => a.order - b.order)
+                .map((task, idx) => (
+                  <Draggable key={task.id} draggableId={task.id} index={idx}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-xl scale-[1.02] ring-2 ring-emerald-500' : ''}`}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex items-center gap-3">
+                            <div {...provided.dragHandleProps} className="p-1">
+                              <IconGrip />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{task.title}</h3>
+                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">المهمة رقم {idx + 1}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              <IconEdit />
+                            </button>
+                            <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500">
+                              <IconTrash />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-6 gap-2">
+                          {days.map((day) => {
+                            const done = checkins[checkinKey(task.id, day)] ?? false;
+                            return (
+                              <div
+                                key={day}
+                                onClick={() => toggleTask(task.id, day)}
+                                className={`flex flex-col items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
+                              >
+                                <span className={`text-[9px] font-bold mb-1 ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{day}</span>
+                                <div className={`w-4 h-4 rounded-sm border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600 scale-110' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
+                                  {done ? <IconCheck /> : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      );
+    }
+
+    return (
+      <Droppable droppableId={section.id} type="task">
+        {(provided) => (
           <div className="hidden md:block overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-            <table className="w-full text-right border-collapse">
+            <table 
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="w-full text-right border-collapse"
+              style={{ minWidth: `${260 + days.length * 36}px` }}
+            >
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
                   <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">المهمة اليومية</th>
@@ -414,9 +485,16 @@ export function PlannerClient({ username }: { username: string }) {
                         <tr 
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${snapshot.isDragging ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50/30 dark:hover:bg-slate-800/20'}`}
+                          className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${
+                            snapshot.isDragging 
+                              ? 'bg-slate-100 dark:bg-slate-800 shadow-xl !flex md:!table w-full' 
+                              : 'hover:bg-slate-50/30 dark:hover:bg-slate-800/20'
+                          }`}
+                          style={provided.draggableProps.style}
                         >
-                          <td className="p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 bg-inherit shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">
+                          <td className={`p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)] ${
+                            snapshot.isDragging ? 'bg-slate-100 dark:bg-slate-800' : 'bg-white dark:bg-slate-900'
+                          }`}>
                             <div className="flex justify-between items-center gap-4">
                               <div className="flex items-center gap-3">
                                 <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
@@ -473,69 +551,14 @@ export function PlannerClient({ username }: { username: string }) {
                       )}
                     </Draggable>
                   ))}
+                {provided.placeholder}
               </tbody>
             </table>
           </div>
-
-          {/* --- Mobile View (Task Cards) --- */}
-          <div className="md:hidden space-y-4 p-2">
-            {section.tasks
-              .sort((a, b) => a.order - b.order)
-              .map((task, idx) => (
-                <Draggable key={task.id} draggableId={task.id} index={idx}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-xl scale-[1.02] ring-2 ring-emerald-500' : ''}`}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <div {...provided.dragHandleProps} className="p-1">
-                            <IconGrip />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{task.title}</h3>
-                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">المهمة رقم {idx + 1}</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
-                            <IconEdit />
-                          </button>
-                          <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500">
-                            <IconTrash />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-6 gap-2">
-                        {days.map((day) => {
-                          const done = checkins[checkinKey(task.id, day)] ?? false;
-                          return (
-                            <div
-                              key={day}
-                              onClick={() => toggleTask(task.id, day)}
-                              className={`flex flex-col items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
-                            >
-                              <span className={`text-[9px] font-bold mb-1 ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{day}</span>
-                              <div className={`w-4 h-4 rounded-sm border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600 scale-110' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
-                                {done ? <IconCheck /> : null}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-          </div>
-          {provided.placeholder}
-        </div>
-      )}
-    </Droppable>
-  );
+        )}
+      </Droppable>
+    );
+  };
 
   if (isLoading) return <Skeleton />;
   if (!plan) return <div className="p-10 text-center dark:text-slate-400">لا توجد بيانات لهذه السنة</div>;
