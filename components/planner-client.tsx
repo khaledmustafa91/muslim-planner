@@ -413,9 +413,16 @@ export function PlannerClient({ username }: { username: string }) {
         method: "POST",
         body: JSON.stringify({ taskId, dayNumber: day, done: next })
       });
-      await mutate();
+      if (plan) {
+        const exists = plan.checkins.some(c => c.taskId === taskId && c.dayNumber === day);
+        const newCheckins = exists
+          ? plan.checkins.map(c => c.taskId === taskId && c.dayNumber === day ? { ...c, done: next } : c)
+          : [...plan.checkins, { taskId, dayNumber: day, done: next }];
+        mutate({ ...plan, checkins: newCheckins }, false);
+      }
     } catch {
       setCheckins((prev) => ({ ...prev, [key]: !next }));
+      if (plan) mutate(plan, false);
       setError("تعذر حفظ التغيير");
     }
   }
@@ -1223,30 +1230,32 @@ export function PlannerClient({ username }: { username: string }) {
             <div className="relative border-r-2 border-emerald-100 dark:border-emerald-900/50 pr-8 mr-4 space-y-6 py-4">
               {plan.scheduledTasks
                 .filter(t => t.dayNumber === selectedDay)
-                .map((task) => (
+                .map((task) => {
+                  const isDone = !!checkins[checkinKey(task.taskId, selectedDay)];
+                  return (
                 <div key={task.id} className="relative group">
                   <div className="absolute -right-[41px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-500 border-4 border-white dark:border-slate-950 shadow-sm z-10" />
                   <div className={`p-4 md:p-6 rounded-3xl border transition-all flex items-center justify-between gap-4 ${
-                    task.done 
-                      ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50" 
+                    isDone
+                      ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50"
                       : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md"
                   }`}>
                     <div className="flex items-center gap-4 flex-1">
                       <div className={`text-sm font-black px-3 py-1.5 rounded-xl ${
-                        task.done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        isDone ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
                       }`}>
                         {task.scheduledTime}
                       </div>
                       <div
                         onClick={() => toggleTask(task.taskId, selectedDay)}
                         className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${
-                          task.done ? "bg-emerald-500 border-emerald-600 shadow-inner" : "bg-white dark:bg-slate-800 border-slate-200"
+                          isDone ? "bg-emerald-500 border-emerald-600 shadow-inner" : "bg-white dark:bg-slate-800 border-slate-200"
                         }`}
                       >
-                        {task.done && <IconCheck />}
+                        {isDone && <IconCheck />}
                       </div>
                       <div>
-                        <h3 className={`font-bold ${task.done ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>
+                        <h3 className={`font-bold ${isDone ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>
                           {task.title}
                         </h3>
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">{task.sectionTitle}</span>
@@ -1260,7 +1269,7 @@ export function PlannerClient({ username }: { username: string }) {
                     </button>
                   </div>
                 </div>
-              ))}
+              ); })}
 
               {plan.scheduledTasks.length === 0 && (
                 <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
