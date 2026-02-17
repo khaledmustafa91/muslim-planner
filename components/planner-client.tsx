@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import useSWR from "swr";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -104,10 +105,13 @@ function ThemeToggle() {
 }
 
 export function PlannerClient({ username }: { username: string }) {
+  const router = useRouter();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   // SWR handles caching, revalidation, and deduplication
   const { data: plan, error: swrError, mutate, isLoading } = useSWR<PlanResponse>(
@@ -118,6 +122,22 @@ export function PlannerClient({ username }: { username: string }) {
       dedupingInterval: 5000,
     }
   );
+
+  // Handle client-side detection of screen size to avoid hydration mismatch
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Set initial active section on mobile
+  useEffect(() => {
+    if (plan?.sections?.length && !activeSectionId) {
+      const firstSection = [...plan.sections].sort((a, b) => a.order - b.order)[0];
+      setActiveSectionId(firstSection.id);
+    }
+  }, [plan, activeSectionId]);
 
   // --- Modal States ---
   const [modalType, setModalType] = useState<"add-section" | "edit-section" | "add-task" | "edit-task" | "delete-confirm" | "reset-confirm" | null>(null);
@@ -146,6 +166,18 @@ export function PlannerClient({ username }: { username: string }) {
   }, [plan?.dayCount]);
 
   const progress = plan?.progress ?? 0;
+
+  const getSectionProgress = useCallback((section: PlannerSection) => {
+    if (!section.tasks.length) return 0;
+    let completed = 0;
+    for (const task of section.tasks) {
+      for (const day of days) {
+        if (checkins[checkinKey(task.id, day)]) completed++;
+      }
+    }
+    const total = section.tasks.length * days.length;
+    return Math.round((completed / total) * 100);
+  }, [checkins, days]);
 
   // --- Drag and Drop Handlers ---
   const onDragEnd = async (result: DropResult) => {
@@ -337,6 +369,153 @@ export function PlannerClient({ username }: { username: string }) {
     return years;
   }, [currentYear]);
 
+  const renderTaskView = (section: PlannerSection) => (
+    <Droppable droppableId={section.id} type="task">
+      {(provided) => (
+        <div {...provided.droppableProps} ref={provided.innerRef}>
+          {/* --- Desktop View (Table) --- */}
+          <div className="hidden md:block overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+            <table className="w-full text-right border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
+                  <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">المهمة اليومية</th>
+                  {days.map((d) => (
+                    <th key={d} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {section.tasks
+                  .sort((a, b) => a.order - b.order)
+                  .map((task, idx) => (
+                    <Draggable key={task.id} draggableId={task.id} index={idx}>
+                      {(provided, snapshot) => (
+                        <tr 
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${snapshot.isDragging ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50/30 dark:hover:bg-slate-800/20'}`}
+                        >
+                          <td className="p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 bg-inherit shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">
+                            <div className="flex justify-between items-center gap-4">
+                              <div className="flex items-center gap-3">
+                                <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
+                                  <IconGrip />
+                                </div>
+                                <span className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{idx + 1}</span>
+                                <span className="text-slate-800 dark:text-slate-200 font-medium whitespace-nowrap">{task.title}</span>
+                              </div>
+
+                              <div className="no-print flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-1.5 rounded-md text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all">
+                                  <IconEdit />
+                                </button>
+                                <select
+                                  className="mx-1 px-1 rounded bg-slate-100 dark:bg-slate-800 text-[10px] border-none focus:ring-1 focus:ring-emerald-400 cursor-pointer text-slate-600 dark:text-slate-300"
+                                  value={section.id}
+                                  onChange={(e) => {
+                                    const destId = e.target.value;
+                                    if(destId !== section.id) {
+                                      api(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ sectionId: destId, order: 9999 }) }).then(() => mutate());
+                                    }
+                                  }}
+                                >
+                                  {plan?.sections.map((entry) => (
+                                    <option key={entry.id} value={entry.id}>{entry.title}</option>
+                                  ))}
+                                </select>
+                                <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-1.5 rounded-md text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all">
+                                  <IconTrash />
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+
+                          {days.map((day) => {
+                            const done = checkins[checkinKey(task.id, day)] ?? false;
+                            return (
+                              <td key={day} className="p-0 border-l border-slate-50 dark:border-slate-800/50 text-center relative h-12">
+                                <div
+                                  onClick={() => toggleTask(task.id, day)}
+                                  className={`checkbox-wrapper w-full h-full flex items-center justify-center cursor-pointer select-none no-print transition-all duration-300 ${done ? "bg-emerald-50/50 dark:bg-emerald-900/10" : "hover:bg-slate-100/50 dark:hover:bg-slate-800/30"}`}
+                                >
+                                  <div className={`w-6 h-6 rounded-md border-2 transition-all flex items-center justify-center ${done ? "bg-emerald-100 dark:bg-emerald-900/50 border-emerald-500 dark:border-emerald-400 scale-110 shadow-sm" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"}`}>
+                                    {done ? <IconCheck /> : null}
+                                  </div>
+                                </div>
+                                <div className="print-only w-full h-full border-l border-slate-300 flex items-center justify-center">
+                                  {done ? <div className="w-3 h-3 bg-slate-800 rounded-sm" /> : null}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
+                    </Draggable>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* --- Mobile View (Task Cards) --- */}
+          <div className="md:hidden space-y-4 p-2">
+            {section.tasks
+              .sort((a, b) => a.order - b.order)
+              .map((task, idx) => (
+                <Draggable key={task.id} draggableId={task.id} index={idx}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm transition-all ${snapshot.isDragging ? 'shadow-xl scale-[1.02] ring-2 ring-emerald-500' : ''}`}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div {...provided.dragHandleProps} className="p-1">
+                            <IconGrip />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{task.title}</h3>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">المهمة رقم {idx + 1}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
+                            <IconEdit />
+                          </button>
+                          <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500">
+                            <IconTrash />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-6 gap-2">
+                        {days.map((day) => {
+                          const done = checkins[checkinKey(task.id, day)] ?? false;
+                          return (
+                            <div
+                              key={day}
+                              onClick={() => toggleTask(task.id, day)}
+                              className={`flex flex-col items-center justify-center p-1.5 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
+                            >
+                              <span className={`text-[9px] font-bold mb-1 ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>{day}</span>
+                              <div className={`w-4 h-4 rounded-sm border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600 scale-110' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
+                                {done ? <IconCheck /> : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+          </div>
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
+
   if (isLoading) return <Skeleton />;
   if (!plan) return <div className="p-10 text-center dark:text-slate-400">لا توجد بيانات لهذه السنة</div>;
 
@@ -437,12 +616,55 @@ export function PlannerClient({ username }: { username: string }) {
           <p className="text-emerald-700 dark:text-emerald-300 mt-2 text-xl font-amiri">"وَفِي ذَلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ"</p>
         </div>
 
+        {/* --- Mobile Category Dashboard --- */}
+        {isMobile && (
+          <div className="grid grid-cols-2 gap-3 mb-8 no-print">
+            {plan.sections
+              .sort((a, b) => a.order - b.order)
+              .map((section) => {
+                const secProgress = getSectionProgress(section);
+                const isActive = activeSectionId === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => setActiveSectionId(section.id)}
+                    className={`relative p-4 rounded-2xl border transition-all text-right group ${
+                      isActive 
+                        ? 'bg-emerald-600 border-emerald-500 shadow-md ring-2 ring-emerald-500/20' 
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold mb-1 ${isActive ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                      {secProgress}% إنجاز
+                    </div>
+                    <div className={`font-bold text-sm truncate ${isActive ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                      {section.title}
+                    </div>
+                    <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${isActive ? 'bg-amber-400' : 'bg-emerald-500'}`} 
+                        style={{ width: `${secProgress}%` }} 
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        )}
+
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="sections" type="section">
             {(provided) => (
               <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-8">
                 {plan.sections
                   .sort((a, b) => a.order - b.order)
+                  // On mobile, only show the active section
+                  .filter((section) => {
+                    if (isMobile) {
+                      return activeSectionId ? section.id === activeSectionId : true;
+                    }
+                    return true;
+                  })
                   .map((section, index) => (
                     <Draggable key={section.id} draggableId={section.id} index={index}>
                       {(provided, snapshot) => (
@@ -479,93 +701,7 @@ export function PlannerClient({ username }: { username: string }) {
                             </div>
                           </div>
 
-                          <Droppable droppableId={section.id} type="task">
-                            {(provided) => (
-                              <div {...provided.droppableProps} ref={provided.innerRef} className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-                                <table className="w-full text-right border-collapse">
-                                  <thead>
-                                    <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
-                                      <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black">المهمة اليومية</th>
-                                      {days.map((d) => (
-                                        <th key={d} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">{d}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody className="text-sm">
-                                    {section.tasks
-                                      .sort((a, b) => a.order - b.order)
-                                      .map((task, idx) => (
-                                        <Draggable key={task.id} draggableId={task.id} index={idx}>
-                                          {(provided, snapshot) => (
-                                            <tr 
-                                              ref={provided.innerRef}
-                                              {...provided.draggableProps}
-                                              className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${snapshot.isDragging ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50/30 dark:hover:bg-slate-800/20'}`}
-                                            >
-                                              <td className="p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 bg-inherit shadow-[4px_0_8px_-4px_rgba(0,0,0,0.05)]">
-                                                <div className="flex justify-between items-center gap-4">
-                                                  <div className="flex items-center gap-3">
-                                                    <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity no-print">
-                                                      <IconGrip />
-                                                    </div>
-                                                    <span className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{idx + 1}</span>
-                                                    <span className="text-slate-800 dark:text-slate-200 font-medium whitespace-nowrap">{task.title}</span>
-                                                  </div>
-
-                                                  <div className="no-print flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => { setModalType("edit-task"); setModalData(task); setModalInputValue(task.title); }} className="p-1.5 rounded-md text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all">
-                                                      <IconEdit />
-                                                    </button>
-                                                    <select
-                                                      className="mx-1 px-1 rounded bg-slate-100 dark:bg-slate-800 text-[10px] border-none focus:ring-1 focus:ring-emerald-400 cursor-pointer text-slate-600 dark:text-slate-300"
-                                                      value={section.id}
-                                                      onChange={(e) => {
-                                                        const destId = e.target.value;
-                                                        if(destId !== section.id) {
-                                                          // Manual move if dropdown used
-                                                          api(`/api/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ sectionId: destId, order: 9999 }) }).then(() => mutate());
-                                                        }
-                                                      }}
-                                                    >
-                                                      {plan.sections.map((entry) => (
-                                                        <option key={entry.id} value={entry.id}>{entry.title}</option>
-                                                      ))}
-                                                    </select>
-                                                    <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "task", id: task.id, title: task.title }); }} className="p-1.5 rounded-md text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all">
-                                                      <IconTrash />
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              </td>
-
-                                              {days.map((day) => {
-                                                const done = checkins[checkinKey(task.id, day)] ?? false;
-                                                return (
-                                                  <td key={day} className="p-0 border-l border-slate-50 dark:border-slate-800/50 text-center relative h-12">
-                                                    <div
-                                                      onClick={() => toggleTask(task.id, day)}
-                                                      className={`checkbox-wrapper w-full h-full flex items-center justify-center cursor-pointer select-none no-print transition-all duration-300 ${done ? "bg-emerald-50/50 dark:bg-emerald-900/10" : "hover:bg-slate-100/50 dark:hover:bg-slate-800/30"}`}
-                                                    >
-                                                      <div className={`w-6 h-6 rounded-md border-2 transition-all flex items-center justify-center ${done ? "bg-emerald-100 dark:bg-emerald-900/50 border-emerald-500 dark:border-emerald-400 scale-110 shadow-sm" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"}`}>
-                                                        {done ? <IconCheck /> : null}
-                                                      </div>
-                                                    </div>
-                                                    <div className="print-only w-full h-full border-l border-slate-300 flex items-center justify-center">
-                                                      {done ? <div className="w-3 h-3 bg-slate-800 rounded-sm" /> : null}
-                                                    </div>
-                                                  </td>
-                                                );
-                                              })}
-                                            </tr>
-                                          )}
-                                        </Draggable>
-                                      ))}
-                                    {provided.placeholder}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </Droppable>
+                          {renderTaskView(section)}
                         </section>
                       )}
                     </Draggable>
