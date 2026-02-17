@@ -103,8 +103,14 @@ export async function getPlanProgress(planId: string): Promise<number> {
 export async function getPlanByYear(userId: string, ramadanYear: number): Promise<PlanResponse> {
   const planId = await getOrCreatePlan(userId, ramadanYear);
 
-  const planRow = await sql<{ day_count: 29 | 30; ramadan_offset: number }>`
-    SELECT day_count, ramadan_offset
+  const planRow = await sql<{ 
+    day_count: 29 | 30; 
+    ramadan_offset: number;
+    location_city: string | null;
+    location_country: string | null;
+    calculation_method: number | null;
+  }>`
+    SELECT day_count, ramadan_offset, location_city, location_country, calculation_method
     FROM plans
     WHERE id = ${planId} AND user_id = ${userId}
     LIMIT 1
@@ -191,6 +197,9 @@ export async function getPlanByYear(userId: string, ramadanYear: number): Promis
     ramadanYear,
     dayCount: planRow.rows[0].day_count,
     ramadanOffset: planRow.rows[0].ramadan_offset,
+    locationCity: planRow.rows[0].location_city ?? undefined,
+    locationCountry: planRow.rows[0].location_country ?? undefined,
+    calculationMethod: planRow.rows[0].calculation_method ?? undefined,
     sections: [...sectionsMap.values()],
     checkins: checkinRows.rows,
     progress,
@@ -376,6 +385,14 @@ export async function updatePlanDayCount(planId: string, dayCount: 29 | 30): Pro
 
 export async function updatePlanOffset(planId: string, offset: number): Promise<void> {
   await sql`UPDATE plans SET ramadan_offset = ${offset} WHERE id = ${planId}`;
+}
+
+export async function updatePlanLocation(planId: string, city: string, country: string, method: number): Promise<void> {
+  await sql`
+    UPDATE plans 
+    SET location_city = ${city}, location_country = ${country}, calculation_method = ${method} 
+    WHERE id = ${planId}
+  `;
 }
 
 export async function reorderSections(planId: string, sectionIds: string[]): Promise<void> {
