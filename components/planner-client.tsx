@@ -139,8 +139,9 @@ export function PlannerClient({ username }: { username: string }) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const [viewMode, setViewMode] = useState<"checklist" | "tracker">("checklist");
-  const [trackerMode, setTrackerMode] = useState<"timeline" | "calendar">("calendar");
+  const [trackerMode, setTrackerMode] = useState<"timeline" | "calendar">("timeline");
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [trackerForm, setTrackerForm] = useState({
@@ -163,6 +164,14 @@ export function PlannerClient({ username }: { username: string }) {
   const ramadanDays = useMemo(() => {
     return getRamadanDays(year, plan?.ramadanOffset ?? 0).slice(0, plan?.dayCount ?? 30);
   }, [year, plan?.dayCount, plan?.ramadanOffset]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Handle client-side detection of screen size to avoid hydration mismatch
   useEffect(() => {
@@ -730,55 +739,57 @@ export function PlannerClient({ username }: { username: string }) {
                 </button>
               </div>
 
-              <div className="relative group">
-                <select
-                  className="appearance-none bg-emerald-900/50 border border-emerald-600 dark:border-emerald-700 text-white rounded-xl pl-10 pr-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                >
-                  {yearOptions.map(y => (
-                    <option key={y} value={y} className="text-slate-900 dark:bg-slate-900 dark:text-slate-100">{y} هـ / م</option>
-                  ))}
-                </select>
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+              <div className="flex items-center gap-3">
+                <div className="relative group">
+                  <select
+                    className="appearance-none bg-emerald-900/50 border border-emerald-600 dark:border-emerald-700 text-white rounded-xl pl-10 pr-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer"
+                    value={year}
+                    onChange={(e) => setYear(Number(e.target.value))}
+                  >
+                    {yearOptions.map(y => (
+                      <option key={y} value={y} className="text-slate-900 dark:bg-slate-900 dark:text-slate-100">{y} هـ / م</option>
+                    ))}
+                  </select>
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                  </div>
                 </div>
+
+                <button 
+                  onClick={() => setModalType("plan-settings")}
+                  className="bg-emerald-900/40 p-2 rounded-xl border border-emerald-600/50 text-emerald-100 hover:bg-emerald-800/50 transition-all"
+                  title="إعدادات الخطة"
+                >
+                  <IconSettings />
+                </button>
+
+                <button onClick={() => window.print()} className="bg-emerald-50 dark:bg-slate-800 text-emerald-800 dark:text-emerald-100 px-4 py-2 rounded-xl text-sm font-bold hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                  طباعة
+                </button>
+                
+                <button 
+                  onClick={() => { setModalType("add-section"); setModalInputValue(""); }} 
+                  className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-500 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <IconPlus /> إضافة قسم
+                </button>
+
+                <button 
+                  onClick={() => setModalType("reset-confirm")} 
+                  className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-amber-600 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  تصفير
+                </button>
+
+                <button 
+                  onClick={logout} 
+                  disabled={submitting}
+                  className="bg-slate-800 dark:bg-slate-950 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? "..." : "خروج"}
+                </button>
               </div>
-
-              <button 
-                onClick={() => setModalType("plan-settings")}
-                className="bg-emerald-900/40 p-2 rounded-xl border border-emerald-600/50 text-emerald-100 hover:bg-emerald-800/50 transition-all"
-                title="إعدادات الخطة"
-              >
-                <IconSettings />
-              </button>
-
-              <button onClick={() => window.print()} className="bg-emerald-50 dark:bg-slate-800 text-emerald-800 dark:text-emerald-100 px-4 py-2 rounded-xl text-sm font-bold hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
-                طباعة
-              </button>
-              
-              <button 
-                onClick={() => { setModalType("add-section"); setModalInputValue(""); }} 
-                className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-500 transition-colors shadow-sm flex items-center gap-2"
-              >
-                <IconPlus /> إضافة قسم
-              </button>
-
-              <button 
-                onClick={() => setModalType("reset-confirm")} 
-                className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-amber-600 transition-colors shadow-sm flex items-center gap-2"
-              >
-                تصفير
-              </button>
-
-              <button 
-                onClick={logout} 
-                disabled={submitting}
-                className="bg-slate-800 dark:bg-slate-950 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 transition-colors disabled:opacity-50"
-              >
-                {submitting ? "..." : "خروج"}
-              </button>
             </div>
 
             {/* 3. Left Side (Last child in RTL): Theme Toggle & Burger */}
@@ -865,60 +876,64 @@ export function PlannerClient({ username }: { username: string }) {
             </div>
           )}
 
-          <div className="mt-6 flex flex-col gap-2">
-            <div className="flex justify-between items-end mb-1">
-              <span className="text-xs font-bold text-emerald-200 uppercase tracking-wider">إنجازك العام</span>
-              <span className="text-lg font-black text-amber-400">{progress}%</span>
+          <div className={`transition-all duration-500 ease-in-out overflow-hidden ${
+            viewMode === "tracker" && isScrolled 
+              ? "max-h-0 opacity-0 mt-0 pointer-events-none" 
+              : "max-h-[500px] opacity-100"
+          }`}>
+            <div className="mt-6 flex flex-col gap-2">
+              <div className="flex justify-between items-end mb-1">
+                <span className="text-xs font-bold text-emerald-200 uppercase tracking-wider">إنجازك العام</span>
+                <span className="text-lg font-black text-amber-400">{progress}%</span>
+              </div>
+              <div className="w-full bg-emerald-950/50 rounded-full h-3.5 p-0.5 shadow-inner">
+                <div 
+                  className="bg-gradient-to-l from-amber-400 to-amber-300 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(251,191,36,0.5)]" 
+                  style={{ width: `${progress}%` }} 
+                />
+              </div>
             </div>
-            <div className="w-full bg-emerald-950/50 rounded-full h-3.5 p-0.5 shadow-inner">
-              <div 
-                className="bg-gradient-to-l from-amber-400 to-amber-300 h-2.5 rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(251,191,36,0.5)]" 
-                style={{ width: `${progress}%` }} 
-              />
-            </div>
-          </div>
-          
-          {/* Day Selector - Always visible when in tracker mode */}
-          {(viewMode === "tracker" || isMobile) && (
-            <div className="mt-6 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3 pb-4">
-              {ramadanDays.map(d => (
-                <button
-                  key={d.dayNumber}
-                  onClick={() => setSelectedDay(d.dayNumber)}
-                  className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all border-2 ${
-                    selectedDay === d.dayNumber 
-                      ? "bg-amber-400 text-emerald-950 border-amber-300 shadow-[0_8px_20px_-4px_rgba(251,191,36,0.4)] scale-110 z-10" 
-                      : "bg-emerald-900/30 text-emerald-100 border-emerald-700/50 hover:bg-emerald-800/50"
-                  }`}
-                >
-                  <span className={`text-[10px] font-bold mb-1 opacity-70 ${selectedDay === d.dayNumber ? "text-emerald-900" : ""}`}>
-                    {d.dayName}
-                  </span>
-                  <span className="text-xl font-black leading-none mb-1">
-                    {d.dayNumber}
-                  </span>
-                  <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
-                    {d.formattedGregorian}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+            
+            {(viewMode === "tracker" || isMobile) && (
+              <div className="mt-6 pb-4 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3">
+                {ramadanDays.map(d => (
+                  <button
+                    key={d.dayNumber}
+                    onClick={() => setSelectedDay(d.dayNumber)}
+                    className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all border-2 ${
+                      selectedDay === d.dayNumber 
+                        ? "bg-amber-400 text-emerald-950 border-amber-300 shadow-md z-10" 
+                        : "bg-emerald-900/30 text-emerald-100 border-emerald-700/50 hover:bg-emerald-800/50"
+                    }`}
+                  >
+                    <span className={`text-[10px] font-bold mb-1 opacity-70 ${selectedDay === d.dayNumber ? "text-emerald-900" : ""}`}>
+                      {d.dayName}
+                    </span>
+                    <span className="text-xl font-black leading-none mb-1">
+                      {d.dayNumber}
+                    </span>
+                    <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
+                      {d.formattedGregorian}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-          {/* Mobile View Toggle */}
-          <div className="lg:hidden mt-4 flex bg-emerald-900/40 p-1 rounded-2xl border border-emerald-600/50">
-            <button
-              onClick={() => setViewMode("checklist")}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${viewMode === "checklist" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
-            >
-              الجدول العام
-            </button>
-            <button
-              onClick={() => setViewMode("tracker")}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${viewMode === "tracker" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
-            >
-              المتابع اليومي
-            </button>
+            <div className="lg:hidden mt-4 flex bg-emerald-900/40 p-1 rounded-2xl border border-emerald-600/50">
+              <button
+                onClick={() => setViewMode("checklist")}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${viewMode === "checklist" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
+              >
+                الجدول العام
+              </button>
+              <button
+                onClick={() => setViewMode("tracker")}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${viewMode === "tracker" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
+              >
+                المتابع اليومي
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -1044,45 +1059,15 @@ export function PlannerClient({ username }: { username: string }) {
                 )}
               </h2>
               
-              <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start md:self-auto">
-                <button
-                  onClick={() => setTrackerMode("calendar")}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${trackerMode === "calendar" ? "bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"}`}
-                >
-                  تقويم
-                </button>
-                <button
-                  onClick={() => setTrackerMode("timeline")}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${trackerMode === "timeline" ? "bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"}`}
-                >
-                  قائمة
-                </button>
-              </div>
-
-              {trackerMode === "timeline" && (
-                <button
-                  onClick={() => setTrackerModalOpen(true)}
-                  className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
-                >
-                  <IconPlus /> إضافة نشاط للجدول
-                </button>
-              )}
+              <button
+                onClick={() => setTrackerModalOpen(true)}
+                className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
+              >
+                <IconPlus /> إضافة نشاط للجدول
+              </button>
             </div>
 
-            {trackerMode === "calendar" ? (
-              <CalendarView 
-                tasks={plan.scheduledTasks.filter(t => t.dayNumber === selectedDay)}
-                onTaskClick={() => {}}
-                onTaskMove={(id, time) => handleTaskMove(id, time)}
-                onTaskResize={(id, duration) => handleTaskResize(id, duration)}
-                onEmptySlotClick={(time) => {
-                  setTrackerForm(prev => ({ ...prev, time, taskId: "", title: "", sectionId: "" }));
-                  setTrackerModalOpen(true);
-                }}
-                onDeleteTask={deleteScheduled}
-                onToggleCheck={(taskId) => toggleTask(taskId, selectedDay)}
-              />
-            ) : (
+            {viewMode === "tracker" && (
             <div className="relative border-r-2 border-emerald-100 dark:border-emerald-900/50 pr-8 mr-4 space-y-6 py-4">
               {plan.scheduledTasks
                 .filter(t => t.dayNumber === selectedDay)
