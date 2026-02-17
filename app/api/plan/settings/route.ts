@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertPlanOwnership, updatePlanDayCount } from "@/lib/db";
+import { assertPlanOwnership, updatePlanDayCount, updatePlanOffset } from "@/lib/db";
 import { getSessionFromCookies } from "@/lib/auth";
 import { badRequest } from "@/lib/validation";
 
@@ -11,10 +11,11 @@ export async function PATCH(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const planId = body?.planId;
-  const dayCount = Number(body?.dayCount);
+  const dayCount = body?.dayCount !== undefined ? Number(body.dayCount) : undefined;
+  const ramadanOffset = body?.ramadanOffset !== undefined ? Number(body.ramadanOffset) : undefined;
 
-  if (typeof planId !== "string" || (dayCount !== 29 && dayCount !== 30)) {
-    return badRequest("بيانات الأيام غير صالحة");
+  if (typeof planId !== "string") {
+    return badRequest("معرف الخطة مطلوب");
   }
 
   const ownsPlan = await assertPlanOwnership(planId, session.userId);
@@ -22,6 +23,15 @@ export async function PATCH(request: NextRequest) {
     return badRequest("غير مصرح", 403);
   }
 
-  await updatePlanDayCount(planId, dayCount);
+  if (dayCount !== undefined) {
+    if (dayCount !== 29 && dayCount !== 30) return badRequest("عدد الأيام غير صالح");
+    await updatePlanDayCount(planId, dayCount);
+  }
+
+  if (ramadanOffset !== undefined) {
+    if (isNaN(ramadanOffset)) return badRequest("الإزاحة غير صالحة");
+    await updatePlanOffset(planId, ramadanOffset);
+  }
+
   return NextResponse.json({ ok: true });
 }

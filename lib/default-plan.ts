@@ -11,13 +11,14 @@ export const defaultSections: SeedSection[] = [
       { title: "الظهر", type: "prayer" },
       { title: "العصر", type: "prayer" },
       { title: "المغرب", type: "prayer" },
-      { title: "العشاء", type: "prayer" }
+      { title: "العشاء", type: "prayer" },
+      { title: "السنن الرواتب (12 ركعة)" },
+
     ]
   },
   {
-    title: "أوراد وأذكار",
+    title: "أذكار",
     tasks: [
-      { title: "السنن الرواتب (12 ركعة)" },
       { title: "أذكار الصباح والمساء" },
       { title: "أذكار ما بعد الصلاة" },
       { title: "ورد ذكر (100 مرة)" }

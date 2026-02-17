@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
+import { getRamadanDays } from "@/lib/date-utils";
 
 // --- Icons ---
 const IconCheck = () => (
@@ -51,6 +52,22 @@ const IconMenu = () => (
 
 const IconClose = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+);
+
+const IconClock = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+);
+
+const IconList = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+);
+
+const IconCalendar = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+);
+
+const IconSettings = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
 );
 
 // --- Helpers ---
@@ -121,6 +138,15 @@ export function PlannerClient({ username }: { username: string }) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"checklist" | "tracker">("checklist");
+  const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [trackerModalOpen, setTrackerModalOpen] = useState(false);
+  const [trackerForm, setTrackerForm] = useState({
+    taskId: "",
+    sectionId: "",
+    title: "",
+    time: "00:00"
+  });
 
   // SWR handles caching, revalidation, and deduplication
   const { data: plan, error: swrError, mutate, isLoading } = useSWR<PlanResponse>(
@@ -131,6 +157,10 @@ export function PlannerClient({ username }: { username: string }) {
       dedupingInterval: 5000,
     }
   );
+
+  const ramadanDays = useMemo(() => {
+    return getRamadanDays(year, plan?.ramadanOffset ?? 0).slice(0, plan?.dayCount ?? 30);
+  }, [year, plan?.dayCount, plan?.ramadanOffset]);
 
   // Handle client-side detection of screen size to avoid hydration mismatch
   useEffect(() => {
@@ -149,7 +179,7 @@ export function PlannerClient({ username }: { username: string }) {
   }, [plan, activeSectionId]);
 
   // --- Modal States ---
-  const [modalType, setModalType] = useState<"add-section" | "edit-section" | "add-task" | "edit-task" | "delete-confirm" | "reset-confirm" | null>(null);
+  const [modalType, setModalType] = useState<"add-section" | "edit-section" | "add-task" | "edit-task" | "delete-confirm" | "reset-confirm" | "plan-settings" | null>(null);
   const [modalData, setModalData] = useState<any>(null);
   const [modalInputValue, setModalInputValue] = useState("");
 
@@ -307,6 +337,38 @@ export function PlannerClient({ username }: { username: string }) {
     }
   }
 
+  async function handleTrackerSubmit() {
+    if (!trackerForm.time) return;
+    if (!trackerForm.taskId && (!trackerForm.sectionId || !trackerForm.title)) return;
+
+    setSubmitting(true);
+    try {
+      await api("/api/daily-tracker", {
+        method: "POST",
+        body: JSON.stringify({
+          ...trackerForm,
+          dayNumber: selectedDay
+        })
+      });
+      setTrackerModalOpen(false);
+      setTrackerForm({ taskId: "", sectionId: "", title: "", time: "00:00" });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر حفظ المهمة");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function deleteScheduled(id: string) {
+    try {
+      await api(`/api/daily-tracker?id=${id}`, { method: "DELETE" });
+      await mutate();
+    } catch (err) {
+      setError("تعذر حذف المهمة من الجدول");
+    }
+  }
+
   const handleModalSubmit = async () => {
     if (!modalType) return;
     const value = modalInputValue.trim();
@@ -381,6 +443,23 @@ export function PlannerClient({ username }: { username: string }) {
       // Rollback on failure
       mutate({ ...plan, dayCount: previousDayCount }, false);
       setError("تعذر تغيير عدد الأيام");
+    }
+  }, [plan, mutate]);
+
+  const handleOffsetChange = useCallback(async (offset: number) => {
+    if (!plan || plan.ramadanOffset === offset) return;
+    const previousOffset = plan.ramadanOffset;
+    // Optimistic update
+    mutate({ ...plan, ramadanOffset: offset }, false);
+    try {
+      await api("/api/plan/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ planId: plan.planId, ramadanOffset: offset })
+      });
+      await mutate();
+    } catch {
+      mutate({ ...plan, ramadanOffset: previousOffset }, false);
+      setError("تعذر تغيير إزاحة التاريخ");
     }
   }, [plan, mutate]);
 
@@ -471,8 +550,13 @@ export function PlannerClient({ username }: { username: string }) {
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 text-xs uppercase tracking-tighter">
                   <th className="p-4 min-w-[260px] sticky right-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 z-10 text-right font-black shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)]">المهمة اليومية</th>
-                  {days.map((d) => (
-                    <th key={d} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">{d}</th>
+                  {ramadanDays.map((d) => (
+                    <th key={d.dayNumber} className="p-1 min-w-[36px] text-center border-l border-slate-50/50 dark:border-slate-800/50 font-bold">
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px]">{d.dayNumber}</span>
+                        <span className="text-[8px] opacity-50 font-medium">{d.formattedGregorian}</span>
+                      </div>
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -584,6 +668,21 @@ export function PlannerClient({ username }: { username: string }) {
 
             {/* 2. Middle: Desktop Actions (Hidden on mobile) */}
             <div className="hidden lg:flex flex-wrap gap-3 items-center">
+              <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50 mr-4">
+                <button
+                  onClick={() => setViewMode("checklist")}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${viewMode === "checklist" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100 hover:bg-emerald-800/50"}`}
+                >
+                  <IconList /> الجدول العام
+                </button>
+                <button
+                  onClick={() => setViewMode("tracker")}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${viewMode === "tracker" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100 hover:bg-emerald-800/50"}`}
+                >
+                  <IconCalendar /> المتابع اليومي
+                </button>
+              </div>
+
               <div className="relative group">
                 <select
                   className="appearance-none bg-emerald-900/50 border border-emerald-600 dark:border-emerald-700 text-white rounded-xl pl-10 pr-4 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all cursor-pointer"
@@ -599,17 +698,13 @@ export function PlannerClient({ username }: { username: string }) {
                 </div>
               </div>
 
-              <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50">
-                {([29, 30] as const).map(d => (
-                  <button
-                    key={d}
-                    onClick={() => handleDayCountChange(d)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${plan.dayCount === d ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100 hover:bg-emerald-800/50"}`}
-                  >
-                    {d} يوم
-                  </button>
-                ))}
-              </div>
+              <button 
+                onClick={() => setModalType("plan-settings")}
+                className="bg-emerald-900/40 p-2 rounded-xl border border-emerald-600/50 text-emerald-100 hover:bg-emerald-800/50 transition-all"
+                title="إعدادات الخطة"
+              >
+                <IconSettings />
+              </button>
 
               <button onClick={() => window.print()} className="bg-emerald-50 dark:bg-slate-800 text-emerald-800 dark:text-emerald-100 px-4 py-2 rounded-xl text-sm font-bold hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
@@ -681,21 +776,13 @@ export function PlannerClient({ username }: { username: string }) {
                   </select>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] uppercase font-bold text-emerald-200/60 pr-1">عدد الأيام</span>
-                  <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50">
-                    {([29, 30] as const).map(d => (
-                      <button
-                        key={d}
-                        onClick={() => {
-                          handleDayCountChange(d);
-                          setIsMenuOpen(false);
-                        }}
-                        className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all ${plan.dayCount === d ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
-                      >
-                        {d}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="text-[10px] uppercase font-bold text-emerald-200/60 pr-1">إعدادات</span>
+                  <button 
+                    onClick={() => { setModalType("plan-settings"); setIsMenuOpen(false); }}
+                    className="w-full bg-emerald-900/50 border border-emerald-600 text-white rounded-xl px-3 py-2 text-sm font-bold flex items-center justify-center gap-2"
+                  >
+                    <IconSettings /> تخصيص الشهر
+                  </button>
                 </div>
               </div>
 
@@ -743,6 +830,49 @@ export function PlannerClient({ username }: { username: string }) {
               />
             </div>
           </div>
+          
+          {/* Day Selector - Always visible when in tracker mode */}
+          {(viewMode === "tracker" || isMobile) && (
+            <div className="mt-6 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3 pb-4">
+              {ramadanDays.map(d => (
+                <button
+                  key={d.dayNumber}
+                  onClick={() => setSelectedDay(d.dayNumber)}
+                  className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all border-2 ${
+                    selectedDay === d.dayNumber 
+                      ? "bg-amber-400 text-emerald-950 border-amber-300 shadow-[0_8px_20px_-4px_rgba(251,191,36,0.4)] scale-110 z-10" 
+                      : "bg-emerald-900/30 text-emerald-100 border-emerald-700/50 hover:bg-emerald-800/50"
+                  }`}
+                >
+                  <span className={`text-[10px] font-bold mb-1 opacity-70 ${selectedDay === d.dayNumber ? "text-emerald-900" : ""}`}>
+                    {d.dayName}
+                  </span>
+                  <span className="text-xl font-black leading-none mb-1">
+                    {d.dayNumber}
+                  </span>
+                  <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
+                    {d.formattedGregorian}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Mobile View Toggle */}
+          <div className="lg:hidden mt-4 flex bg-emerald-900/40 p-1 rounded-2xl border border-emerald-600/50">
+            <button
+              onClick={() => setViewMode("checklist")}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${viewMode === "checklist" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
+            >
+              الجدول العام
+            </button>
+            <button
+              onClick={() => setViewMode("tracker")}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${viewMode === "tracker" ? "bg-amber-400 text-emerald-950 shadow-md" : "text-emerald-100"}`}
+            >
+              المتابع اليومي
+            </button>
+          </div>
         </div>
       </header>
 
@@ -752,101 +882,182 @@ export function PlannerClient({ username }: { username: string }) {
           <p className="text-emerald-700 dark:text-emerald-300 mt-2 text-xl font-amiri">"وَفِي ذَلِكَ فَلْيَتَنَافَسِ الْمُتَنَافِسُونَ"</p>
         </div>
 
-        {/* --- Mobile Category Dashboard --- */}
-        {isMobile && (
-          <div className="grid grid-cols-2 gap-3 mb-8 no-print">
-            {plan.sections
-              .sort((a, b) => a.order - b.order)
-              .map((section) => {
-                const secProgress = getSectionProgress(section);
-                const isActive = activeSectionId === section.id;
-                return (
-                  <button
-                    key={section.id}
-                    onClick={() => setActiveSectionId(section.id)}
-                    className={`relative p-4 rounded-2xl border transition-all text-right group ${
-                      isActive 
-                        ? 'bg-emerald-600 border-emerald-500 shadow-md ring-2 ring-emerald-500/20' 
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
-                    }`}
-                  >
-                    <div className={`text-xs font-bold mb-1 ${isActive ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-500'}`}>
-                      {secProgress}% إنجاز
-                    </div>
-                    <div className={`font-bold text-sm truncate ${isActive ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
-                      {section.title}
-                    </div>
-                    <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${isActive ? 'bg-amber-400' : 'bg-emerald-50'}`} 
-                        style={{ width: `${secProgress}%` }} 
-                      />
-                    </div>
-                  </button>
-                );
-              })}
-          </div>
-        )}
-
-        <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="sections" type="section">
-            {(provided) => (
-              <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-8">
+        {viewMode === "checklist" ? (
+          <>
+            {/* --- Mobile Category Dashboard --- */}
+            {isMobile && (
+              <div className="grid grid-cols-2 gap-3 mb-8 no-print">
                 {plan.sections
                   .sort((a, b) => a.order - b.order)
-                  // On mobile, only show the active section
-                  .filter((section) => {
-                    if (isMobile) {
-                      return activeSectionId ? section.id === activeSectionId : true;
-                    }
-                    return true;
-                  })
-                  .map((section, index) => (
-                    <Draggable key={section.id} draggableId={section.id} index={index}>
-                      {(provided, snapshot) => (
-                        <section 
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all ${snapshot.isDragging ? 'shadow-2xl ring-2 ring-emerald-500 scale-[1.01]' : 'hover:shadow-md'}`}
-                        >
-                          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4 justify-between">
-                            <div className="flex items-center gap-3">
-                              <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1">
-                                <IconGrip />
-                              </div>
-                              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold">
-                                {section.title.charAt(0)}
-                              </div>
-                              <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg">{section.title}</h2>
-                            </div>
-                            
-                            <div className="no-print flex flex-wrap gap-2 items-center">
-                              <button 
-                                onClick={() => { setModalType("add-task"); setModalData({ sectionId: section.id }); setModalInputValue(""); }} 
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                              >
-                                <IconPlus /> مهمة جديدة
-                              </button>
-                              <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
-                              <button onClick={() => { setModalType("edit-section"); setModalData(section); setModalInputValue(section.title); }} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all" title="تعديل">
-                                <IconEdit />
-                              </button>
-                              <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "section", id: section.id, title: section.title }); }} className="p-1.5 rounded-lg text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all" title="حذف">
-                                <IconTrash />
-                              </button>
-                            </div>
-                          </div>
-
-                          {renderTaskView(section)}
-                        </section>
-                      )}
-                    </Draggable>
-                  ))}
-                {provided.placeholder}
+                  .map((section) => {
+                    const secProgress = getSectionProgress(section);
+                    const isActive = activeSectionId === section.id;
+                    return (
+                      <button
+                        key={section.id}
+                        onClick={() => setActiveSectionId(section.id)}
+                        className={`relative p-4 rounded-2xl border transition-all text-right group ${
+                          isActive 
+                            ? 'bg-emerald-600 border-emerald-500 shadow-md ring-2 ring-emerald-500/20' 
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className={`text-xs font-bold mb-1 ${isActive ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {secProgress}% إنجاز
+                        </div>
+                        <div className={`font-bold text-sm truncate ${isActive ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                          {section.title}
+                        </div>
+                        <div className="mt-3 h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full transition-all duration-500 ${isActive ? 'bg-amber-400' : 'bg-emerald-50'}`} 
+                            style={{ width: `${secProgress}%` }} 
+                          />
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             )}
-          </Droppable>
-        </DragDropContext>
+
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="sections" type="section">
+                {(provided) => (
+                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-8">
+                    {plan.sections
+                      .sort((a, b) => a.order - b.order)
+                      // On mobile, only show the active section
+                      .filter((section) => {
+                        if (isMobile) {
+                          return activeSectionId ? section.id === activeSectionId : true;
+                        }
+                        return true;
+                      })
+                      .map((section, index) => (
+                        <Draggable key={section.id} draggableId={section.id} index={index}>
+                          {(provided, snapshot) => (
+                            <section 
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all ${snapshot.isDragging ? 'shadow-2xl ring-2 ring-emerald-500 scale-[1.01]' : 'hover:shadow-md'}`}
+                            >
+                              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4 justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1">
+                                    <IconGrip />
+                                  </div>
+                                  <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold">
+                                    {section.title.charAt(0)}
+                                  </div>
+                                  <h2 className="font-bold text-slate-800 dark:text-slate-100 text-lg">{section.title}</h2>
+                                </div>
+                                
+                                <div className="no-print flex flex-wrap gap-2 items-center">
+                                  <button 
+                                    onClick={() => { setModalType("add-task"); setModalData({ sectionId: section.id }); setModalInputValue(""); }} 
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                                  >
+                                    <IconPlus /> مهمة جديدة
+                                  </button>
+                                  <div className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
+                                  <button onClick={() => { setModalType("edit-section"); setModalData(section); setModalInputValue(section.title); }} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all" title="تعديل">
+                                    <IconEdit />
+                                  </button>
+                                  <button onClick={() => { setModalType("delete-confirm"); setModalData({ type: "section", id: section.id, title: section.title }); }} className="p-1.5 rounded-lg text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all" title="حذف">
+                                    <IconTrash />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {renderTaskView(section)}
+                            </section>
+                          )}
+                        </Draggable>
+                      ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          </>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+                <span className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-xl text-amber-600 dark:text-amber-400">
+                   <IconClock />
+                </span>
+                {ramadanDays.find(d => d.dayNumber === selectedDay) && (
+                  <span className="flex flex-col md:flex-row md:items-baseline md:gap-2">
+                    <span>{ramadanDays.find(d => d.dayNumber === selectedDay)?.dayName}، {selectedDay} رمضان</span>
+                    <span className="text-sm font-medium text-slate-400 dark:text-slate-500">
+                      ({ramadanDays.find(d => d.dayNumber === selectedDay)?.formattedGregorian})
+                    </span>
+                  </span>
+                )}
+              </h2>
+              <button
+                onClick={() => setTrackerModalOpen(true)}
+                className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
+              >
+                <IconPlus /> إضافة نشاط للجدول
+              </button>
+            </div>
+
+            <div className="relative border-r-2 border-emerald-100 dark:border-emerald-900/50 pr-8 mr-4 space-y-6 py-4">
+              {plan.scheduledTasks
+                .filter(t => t.dayNumber === selectedDay)
+                .map((task) => (
+                <div key={task.id} className="relative group">
+                  <div className="absolute -right-[41px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-500 border-4 border-white dark:border-slate-950 shadow-sm z-10" />
+                  <div className={`p-4 md:p-6 rounded-3xl border transition-all flex items-center justify-between gap-4 ${
+                    task.done 
+                      ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50" 
+                      : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md"
+                  }`}>
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className={`text-sm font-black px-3 py-1.5 rounded-xl ${
+                        task.done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                      }`}>
+                        {task.scheduledTime}
+                      </div>
+                      <div
+                        onClick={() => toggleTask(task.taskId, selectedDay)}
+                        className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${
+                          task.done ? "bg-emerald-500 border-emerald-600 shadow-inner" : "bg-white dark:bg-slate-800 border-slate-200"
+                        }`}
+                      >
+                        {task.done && <IconCheck />}
+                      </div>
+                      <div>
+                        <h3 className={`font-bold ${task.done ? "text-slate-400 line-through" : "text-slate-800 dark:text-slate-100"}`}>
+                          {task.title}
+                        </h3>
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">{task.sectionTitle}</span>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => deleteScheduled(task.id)}
+                      className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 transition-all"
+                    >
+                      <IconTrash />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {plan.scheduledTasks.length === 0 && (
+                <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="bg-slate-50 dark:bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                    <IconClock />
+                  </div>
+                  <h3 className="text-slate-500 dark:text-slate-400 font-bold">لا توجد مهام مجدولة لهذا اليوم</h3>
+                  <p className="text-slate-400 dark:text-slate-500 text-xs mt-1">ابدأ بإضافة مهام من خطتك العامة أو مهام جديدة</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="mt-12 text-center text-slate-400 dark:text-slate-500 text-xs no-print flex flex-col items-center gap-2">
           <div className="flex items-center gap-2">
@@ -870,7 +1081,58 @@ export function PlannerClient({ username }: { username: string }) {
           "تأكيد الحذف"
         }
       >
-        {modalType === "reset-confirm" ? (
+        {modalType === "plan-settings" ? (
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">طول شهر رمضان</label>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                {([29, 30] as const).map(d => (
+                  <button
+                    key={d}
+                    onClick={() => handleDayCountChange(d)}
+                    className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${plan.dayCount === d ? "bg-emerald-600 text-white shadow-lg" : "text-slate-500 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"}`}
+                  >
+                    {d} يوم
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-baseline">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">تعديل بداية الشهر (رؤية الهلال)</label>
+                <span className={`text-xs font-black px-2 py-1 rounded-lg ${plan.ramadanOffset === 0 ? "bg-slate-100 text-slate-500" : "bg-amber-100 text-amber-700"}`}>
+                  {plan.ramadanOffset > 0 ? `+${plan.ramadanOffset}` : plan.ramadanOffset} يوم
+                </span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[-2, -1, 0, 1, 2].map((offset) => (
+                  <button
+                    key={offset}
+                    onClick={() => handleOffsetChange(offset)}
+                    className={`py-3 rounded-xl text-sm font-bold transition-all border-2 ${
+                      plan.ramadanOffset === offset 
+                        ? "bg-amber-400 border-amber-300 text-emerald-950 shadow-md" 
+                        : "bg-slate-50 dark:bg-slate-800 border-transparent text-slate-500 hover:border-slate-200 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    {offset > 0 ? `+${offset}` : offset}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed mt-2 text-center">
+                استخدم هذا الخيار إذا كانت بداية رمضان في بلدك تختلف عن الحساب الفلكي الافتراضي.
+              </p>
+            </div>
+
+            <button 
+              onClick={() => setModalType(null)}
+              className="w-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 py-4 rounded-2xl font-bold hover:opacity-90 transition-all mt-4 shadow-xl"
+            >
+              تم
+            </button>
+          </div>
+        ) : modalType === "reset-confirm" ? (
           <div className="space-y-4">
             <p className="text-slate-600 dark:text-slate-400">هل تريد تصفير المتابعة للسنة الحالية <span className="font-bold text-slate-900 dark:text-slate-100">{year}</span>؟</p>
             <p className="text-xs text-amber-600 dark:text-amber-400 font-bold">هذا الإجراء لا يمكن التراجع عنه.</p>
@@ -941,6 +1203,100 @@ export function PlannerClient({ username }: { username: string }) {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* --- Tracker Modal --- */}
+      <Modal
+        isOpen={trackerModalOpen}
+        onClose={() => setTrackerModalOpen(false)}
+        title={`جدولة مهمة لليوم ${selectedDay}`}
+      >
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">الوقت</label>
+              <input 
+                type="time" 
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                value={trackerForm.time}
+                onChange={e => setTrackerForm(prev => ({ ...prev, time: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">نوع المهمة</label>
+              <select 
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                value={trackerForm.taskId ? "existing" : "new"}
+                onChange={e => setTrackerForm(prev => ({ ...prev, taskId: e.target.value === "new" ? "" : "placeholder" }))}
+              >
+                <option value="existing">من الخطة الحالية</option>
+                <option value="new">مهمة جديدة بالكامل</option>
+              </select>
+            </div>
+          </div>
+
+          {trackerForm.taskId !== "" ? (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">اختر المهمة</label>
+              <select 
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                value={trackerForm.taskId === "placeholder" ? "" : trackerForm.taskId}
+                onChange={e => setTrackerForm(prev => ({ ...prev, taskId: e.target.value }))}
+              >
+                <option value="">-- اختر من القائمة --</option>
+                {plan.sections.map(s => (
+                  <optgroup key={s.id} label={s.title}>
+                    {s.tasks.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">اسم المهمة</label>
+                <input 
+                  type="text" 
+                  placeholder="مثال: قراءة صفحة من التفسير"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                  value={trackerForm.title}
+                  onChange={e => setTrackerForm(prev => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">القسم (التصنيف)</label>
+                <select 
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                  value={trackerForm.sectionId}
+                  onChange={e => setTrackerForm(prev => ({ ...prev, sectionId: e.target.value }))}
+                >
+                  <option value="">-- اختر القسم --</option>
+                  {plan.sections.map(s => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button 
+              onClick={handleTrackerSubmit}
+              disabled={submitting || (!trackerForm.taskId && (!trackerForm.title || !trackerForm.sectionId))}
+              className="flex-1 bg-emerald-600 text-white py-4 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg disabled:opacity-50"
+            >
+              {submitting ? "جاري الحفظ..." : "إضافة للجدول"}
+            </button>
+            <button 
+              onClick={() => setTrackerModalOpen(false)}
+              className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-4 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+            >
+              إلغاء
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* --- Error Toast --- */}
