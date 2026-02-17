@@ -898,7 +898,7 @@ export function PlannerClient({ username }: { username: string }) {
               </div>
             </div>
             
-            {(viewMode === "tracker" || isMobile) && (
+            {viewMode === "tracker" && (
               <div className="mt-6 pb-4 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3">
                 {ramadanDays.map(d => (
                   <button
@@ -916,9 +916,11 @@ export function PlannerClient({ username }: { username: string }) {
                     <span className="text-xl font-black leading-none mb-1">
                       {d.dayNumber}
                     </span>
-                    <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
-                      {d.formattedGregorian}
-                    </span>
+                    {!isScrolled && (
+                      <span className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}>
+                        {d.formattedGregorian}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
