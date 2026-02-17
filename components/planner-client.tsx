@@ -573,17 +573,14 @@ export function PlannerClient({ username }: { username: string }) {
                               <div
                                 key={day}
                                 onClick={() => toggleTask(task.id, day)}
-                                className={`flex flex-col items-center justify-center p-1 rounded-lg border transition-all cursor-pointer select-none active:scale-90 ${done ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-500' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700'}`}
+                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all cursor-pointer select-none active:scale-90 relative overflow-hidden ${
+                                  done 
+                                    ? 'bg-emerald-500 border-emerald-600 shadow-[0_4px_12px_-2px_rgba(16,185,129,0.4)]' 
+                                    : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-emerald-200'
+                                }`}
                               >
-                                <span className={`text-[9px] font-black leading-none ${done ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>{day}</span>
-                                <span className={`text-[6px] font-bold mt-0.5 opacity-60 leading-none ${done ? 'text-emerald-600' : 'text-slate-400'}`}>{d.formattedGregorian}</span>
-                                <div className={`w-3 h-3 mt-1 rounded-[3px] border transition-all flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-600' : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600'}`}>
-                                  {done ? (
-                                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="5">
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  ) : null}
-                                </div>
+                                <span className={`text-[11px] font-black leading-none ${done ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>{day}</span>
+                                <span className={`text-[7px] font-bold mt-1 leading-none ${done ? 'text-emerald-50/80' : 'text-slate-400'}`}>{d.formattedGregorian}</span>
                               </div>
                             );
                           })}
