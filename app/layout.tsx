@@ -16,8 +16,11 @@ const amiri = Amiri({
 });
 
 export const metadata: Metadata = {
-  title: "Muslim Planner | رفيق المسلم",
-  description: "Muslim planner with dynamic sections and user authentication"
+  title: "Rafiq | رفيق",
+  description: "رفيق - تطبيق لتنظيم العبادات والمهام اليومية",
+  icons: {
+    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fcd34d" stroke="%23f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
