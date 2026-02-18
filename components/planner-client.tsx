@@ -371,18 +371,50 @@ export function PlannerClient({ username }: { username: string }) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
   const [viewMode, setViewMode] = useState<"checklist" | "tracker">("tracker");
   const [trackerMode, setTrackerMode] = useState<"timeline" | "calendar">(
     "timeline",
   );
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
-  const [trackerForm, setTrackerForm] = useState({
+  const [trackerForm, setTrackerForm] = useState<{
+    taskId: string;
+    sectionId: string;
+    title: string;
+    time: string;
+    scheduleType: "once" | "daily" | "weekly" | "monthly";
+    selectedDate: string;
+    selectedDayOfWeek: number;
+    duration: number;
+    isRecurring: boolean;
+  }>({
     taskId: "",
     sectionId: "",
     title: "",
     time: "00:00",
+    scheduleType: "once",
+    selectedDate: "",
+    selectedDayOfWeek: 5, // Default Friday
+    duration: 30,
+    isRecurring: false,
+  });
+
+  const [addTaskForm, setAddTaskForm] = useState<{
+    title: string;
+    isScheduled: boolean;
+    scheduleType: "once" | "daily" | "weekly";
+    time: string;
+    duration: number;
+    selectedDayOfWeek: number;
+    selectedDate: string;
+  }>({
+    title: "",
+    isScheduled: false,
+    scheduleType: "daily",
+    time: "10:00",
+    duration: 30,
+    selectedDayOfWeek: 5,
+    selectedDate: "",
   });
 
   const [locationForm, setLocationForm] = useState({
@@ -401,8 +433,6 @@ export function PlannerClient({ username }: { username: string }) {
     countries?: string;
     cities?: string;
   }>({});
-
-  const bottomNavbarRef = useRef<HTMLDivElement | null>(null);
 
   const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
 
@@ -568,22 +598,6 @@ export function PlannerClient({ username }: { username: string }) {
     }
   }, [plan]);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrolled = window.scrollY > 10;
-      setIsScrolled(scrolled);
-      if (bottomNavbarRef.current) {
-        if (scrolled) {
-          bottomNavbarRef.current.classList.add("hidden");
-        } else {
-          bottomNavbarRef.current.classList.remove("hidden");
-        }
-      }
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
   // Handle client-side detection of screen size to avoid hydration mismatch
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -615,7 +629,8 @@ export function PlannerClient({ username }: { username: string }) {
   >(null);
   const [modalData, setModalData] = useState<any>(null);
   const [modalInputValue, setModalInputValue] = useState("");
-  
+  const [modalSectionValue, setModalSectionValue] = useState("");
+
   // New Modals State
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -799,10 +814,10 @@ export function PlannerClient({ username }: { username: string }) {
         );
         const newCheckins = exists
           ? plan.checkins.map((c) =>
-              c.taskId === taskId && c.dayNumber === day
-                ? { ...c, done: next }
-                : c,
-            )
+            c.taskId === taskId && c.dayNumber === day
+              ? { ...c, done: next }
+              : c,
+          )
           : [...plan.checkins, { taskId, dayNumber: day, done: next }];
         mutate({ ...plan, checkins: newCheckins }, false);
       }
@@ -813,10 +828,99 @@ export function PlannerClient({ username }: { username: string }) {
     }
   }
 
+  async function handleRecurringSubmit() {
+    if (!plan) return;
+    setSyncProgress(0);
+    setSubmitting(true);
+
+    try {
+      const res = await fetch("/api/tasks/schedule-recurring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId: plan.planId,
+          year,
+          taskId: trackerForm.taskId || undefined,
+          sectionId: trackerForm.sectionId,
+          title: trackerForm.title,
+          scheduleType: trackerForm.scheduleType,
+          selectedDate: trackerForm.selectedDate || selectedDay,
+          selectedDayOfWeek: Number(trackerForm.selectedDayOfWeek),
+          time: trackerForm.time,
+          duration: trackerForm.duration
+        })
+      });
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunks = decoder.decode(value).split("\n\n");
+        for (const chunk of chunks) {
+          if (!chunk.startsWith("data: ")) continue;
+
+          try {
+            const event = JSON.parse(chunk.slice(6));
+
+            if (event.step && event.total) {
+              setSyncProgress(Math.round((event.step / event.total) * 100));
+            }
+
+            if (event.error) {
+              setNotification({ message: event.error, type: "info" });
+              throw new Error(event.error);
+            }
+
+            if (event.done) {
+              setSyncProgress(100);
+              setNotification({
+                message: `تمت جدولة ${event.count} مهمة بنجاح`,
+                type: "success"
+              });
+
+              setTrackerModalOpen(false);
+              setTrackerForm({
+                taskId: "",
+                sectionId: "",
+                title: "",
+                time: "00:00",
+                scheduleType: "once",
+                selectedDate: "",
+                selectedDayOfWeek: 5,
+                duration: 30,
+                isRecurring: false
+              });
+              await mutate();
+              setTimeout(() => setNotification(null), 3000);
+              return;
+            }
+          } catch (e) {
+            console.error("Parse error", e);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Scheduling error:", err);
+      setError(err.message || "فشل في جدولة المهام");
+    } finally {
+      setSubmitting(false);
+      setSyncProgress(null);
+    }
+  }
+
   async function handleTrackerSubmit() {
     if (!trackerForm.time) return;
     if (!trackerForm.taskId && (!trackerForm.sectionId || !trackerForm.title))
       return;
+
+    // Use new recurring logic if needed
+    if (trackerForm.isRecurring || trackerForm.scheduleType !== "once") {
+      await handleRecurringSubmit();
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -825,11 +929,21 @@ export function PlannerClient({ username }: { username: string }) {
         body: JSON.stringify({
           ...trackerForm,
           dayNumber: selectedDay,
-          duration: 30, // Default duration
+          duration: trackerForm.duration || 30,
         }),
       });
       setTrackerModalOpen(false);
-      setTrackerForm({ taskId: "", sectionId: "", title: "", time: "00:00" });
+      setTrackerForm({
+        taskId: "",
+        sectionId: "",
+        title: "",
+        time: "00:00",
+        scheduleType: "once",
+        selectedDate: "",
+        selectedDayOfWeek: 5,
+        duration: 30,
+        isRecurring: false
+      });
       await mutate();
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر حفظ المهمة");
@@ -979,6 +1093,13 @@ export function PlannerClient({ username }: { username: string }) {
 
   const handleModalSubmit = async () => {
     if (!modalType) return;
+
+    // For Add Task, use the specialized form (unless it's simple mode, but let's unify handling)
+    if (modalType === "add-task") {
+      await handleAddTaskSubmit();
+      return;
+    }
+
     const value = modalInputValue.trim();
     if (
       !value &&
@@ -999,18 +1120,13 @@ export function PlannerClient({ username }: { username: string }) {
           method: "PATCH",
           body: JSON.stringify({ title: value }),
         });
-      } else if (modalType === "add-task") {
-        await api("/api/tasks", {
-          method: "POST",
-          body: JSON.stringify({
-            sectionId: modalData.sectionId,
-            title: value,
-          }),
-        });
       } else if (modalType === "edit-task") {
         await api(`/api/tasks/${modalData.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ title: value }),
+          body: JSON.stringify({
+            title: value,
+            sectionId: modalSectionValue,
+          }),
         });
       } else if (modalType === "delete-confirm") {
         const url =
@@ -1033,6 +1149,93 @@ export function PlannerClient({ username }: { username: string }) {
       setSubmitting(false);
     }
   };
+
+  async function handleAddTaskSubmit() {
+    if (!addTaskForm.title.trim()) return;
+    if (!plan) return;
+
+    setSubmitting(true);
+    setSyncProgress(null);
+
+    // If NOT scheduled, use simple API
+    if (!addTaskForm.isScheduled) {
+      try {
+        await api("/api/tasks", {
+          method: "POST",
+          body: JSON.stringify({
+            sectionId: modalData.sectionId,
+            title: addTaskForm.title,
+          }),
+        });
+        setModalType(null);
+        setAddTaskForm(prev => ({ ...prev, title: "" }));
+        await mutate();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "حدث خطأ أثناء إضافة المهمة");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // If Scheduled, use Recurring/SSE API
+    setSyncProgress(0);
+    try {
+      const res = await fetch("/api/tasks/schedule-recurring", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId: plan.planId,
+          year,
+          sectionId: modalData.sectionId,
+          title: addTaskForm.title,
+          scheduleType: addTaskForm.scheduleType,
+          selectedDate: addTaskForm.selectedDate || selectedDay, // Default to selectedDay if 'once' and not specified
+          selectedDayOfWeek: Number(addTaskForm.selectedDayOfWeek),
+          time: addTaskForm.time,
+          duration: addTaskForm.duration
+        })
+      });
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunks = decoder.decode(value).split("\n\n");
+        for (const chunk of chunks) {
+          if (!chunk.startsWith("data: ")) continue;
+          const event = JSON.parse(chunk.slice(6));
+
+          if (event.step && event.total) {
+            setSyncProgress(Math.round((event.step / event.total) * 100));
+          }
+          if (event.error) throw new Error(event.error);
+
+          if (event.done) {
+            setSyncProgress(100);
+            setNotification({
+              message: `تمت إضافة وجدولة المهمة بنجاح`,
+              type: "success"
+            });
+            setModalType(null);
+            setAddTaskForm(prev => ({ ...prev, title: "" }));
+            await mutate();
+            setTimeout(() => setNotification(null), 3000);
+            return;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "حدث خطأ أثناء جدولة المهمة");
+    } finally {
+      setSubmitting(false);
+      setSyncProgress(null);
+    }
+  }
 
   async function logout() {
     setSubmitting(true);
@@ -1134,6 +1337,7 @@ export function PlannerClient({ username }: { username: string }) {
                                 setModalType("edit-task");
                                 setModalData(task);
                                 setModalInputValue(task.title);
+                                setModalSectionValue(section.id);
                               }}
                               className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500"
                             >
@@ -1164,11 +1368,10 @@ export function PlannerClient({ username }: { username: string }) {
                               <div
                                 key={day}
                                 onClick={() => toggleTask(task.id, day)}
-                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all cursor-pointer select-none active:scale-90 relative overflow-hidden ${
-                                  done
-                                    ? "bg-emerald-500 border-emerald-600 shadow-[0_4px_12px_-2px_rgba(16,185,129,0.4)]"
-                                    : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-emerald-200"
-                                }`}
+                                className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all cursor-pointer select-none active:scale-90 relative overflow-hidden ${done
+                                  ? "bg-emerald-500 border-emerald-600 shadow-[0_4px_12px_-2px_rgba(16,185,129,0.4)]"
+                                  : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-emerald-200"
+                                  }`}
                               >
                                 <span
                                   className={`text-[11px] font-black leading-none ${done ? "text-white" : "text-slate-900 dark:text-slate-100"}`}
@@ -1237,19 +1440,17 @@ export function PlannerClient({ username }: { username: string }) {
                         <tr
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${
-                            snapshot.isDragging
-                              ? "bg-slate-100 dark:bg-slate-800 shadow-xl !flex md:!table w-full"
-                              : "hover:bg-slate-50/30 dark:hover:bg-slate-800/20"
-                          }`}
+                          className={`group border-b border-slate-50 dark:border-slate-800/50 transition-colors ${snapshot.isDragging
+                            ? "bg-slate-100 dark:bg-slate-800 shadow-xl !flex md:!table w-full"
+                            : "hover:bg-slate-50/30 dark:hover:bg-slate-800/20"
+                            }`}
                           style={provided.draggableProps.style}
                         >
                           <td
-                            className={`p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)] ${
-                              snapshot.isDragging
-                                ? "bg-slate-100 dark:bg-slate-800"
-                                : "bg-white dark:bg-slate-900"
-                            }`}
+                            className={`p-3 md:p-4 font-medium text-slate-700 dark:text-slate-300 sticky right-0 border-l border-slate-50 dark:border-slate-800 z-10 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[4px_0_12px_-2px_rgba(0,0,0,0.5)] ${snapshot.isDragging
+                              ? "bg-slate-100 dark:bg-slate-800"
+                              : "bg-white dark:bg-slate-900"
+                              }`}
                           >
                             <div className="flex justify-between items-center gap-4">
                               <div className="flex items-center gap-3">
@@ -1273,33 +1474,13 @@ export function PlannerClient({ username }: { username: string }) {
                                     setModalType("edit-task");
                                     setModalData(task);
                                     setModalInputValue(task.title);
+                                    setModalSectionValue(section.id);
                                   }}
                                   className="p-1.5 rounded-md text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-all"
                                 >
                                   <IconEdit />
                                 </button>
-                                <select
-                                  className="mx-1 px-1 rounded bg-slate-100 dark:bg-slate-800 text-[10px] border-none focus:ring-1 focus:ring-emerald-400 cursor-pointer text-slate-600 dark:text-slate-300"
-                                  value={section.id}
-                                  onChange={(e) => {
-                                    const destId = e.target.value;
-                                    if (destId !== section.id) {
-                                      api(`/api/tasks/${task.id}`, {
-                                        method: "PATCH",
-                                        body: JSON.stringify({
-                                          sectionId: destId,
-                                          order: 9999,
-                                        }),
-                                      }).then(() => mutate());
-                                    }
-                                  }}
-                                >
-                                  {plan?.sections.map((entry) => (
-                                    <option key={entry.id} value={entry.id}>
-                                      {entry.title}
-                                    </option>
-                                  ))}
-                                </select>
+
                                 <button
                                   onClick={() => {
                                     setModalType("delete-confirm");
@@ -1395,21 +1576,19 @@ export function PlannerClient({ username }: { username: string }) {
               <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50 transition-all duration-300">
                 <button
                   onClick={() => setViewMode("tracker")}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ease-out flex items-center gap-2 ${
-                    viewMode === "tracker"
-                      ? "bg-amber-400 text-emerald-950 shadow-md"
-                      : "text-emerald-100 hover:bg-emerald-800/50"
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ease-out flex items-center gap-2 ${viewMode === "tracker"
+                    ? "bg-amber-400 text-emerald-950 shadow-md"
+                    : "text-emerald-100 hover:bg-emerald-800/50"
+                    }`}
                 >
                   <IconCalendar /> المتابع اليومي
                 </button>
                 <button
                   onClick={() => setViewMode("checklist")}
-                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ease-out flex items-center gap-2 ${
-                    viewMode === "checklist"
-                      ? "bg-amber-400 text-emerald-950 shadow-md"
-                      : "text-emerald-100 hover:bg-emerald-800/50"
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-300 ease-out flex items-center gap-2 ${viewMode === "checklist"
+                    ? "bg-amber-400 text-emerald-950 shadow-md"
+                    : "text-emerald-100 hover:bg-emerald-800/50"
+                    }`}
                 >
                   <IconList /> الجدول العام
                 </button>
@@ -1480,9 +1659,8 @@ export function PlannerClient({ username }: { username: string }) {
             </div>
           )}
 
-          {/* Scrollable Bottom Section - animated show/hide */}
+          {/* Scrollable Bottom Section */}
           <div
-            ref={bottomNavbarRef}
             className="navbar-bottom transition-all duration-300 ease-out"
             data-aos="slide-up"
           >
@@ -1502,59 +1680,25 @@ export function PlannerClient({ username }: { username: string }) {
                 />
               </div>
             </div>
-
-            {viewMode === "tracker" && (
-              <div className="mt-6 pb-4 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3">
-                {ramadanDays.map((d) => (
-                  <button
-                    key={d.dayNumber}
-                    onClick={() => setSelectedDay(d.dayNumber)}
-                    className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all border-2 ${
-                      selectedDay === d.dayNumber
-                        ? "bg-amber-400 text-emerald-950 border-amber-300 shadow-md z-10"
-                        : "bg-emerald-900/30 text-emerald-100 border-emerald-700/50 hover:bg-emerald-800/50"
-                    }`}
-                  >
-                    <span
-                      className={`text-[10px] font-bold mb-1 opacity-70 ${selectedDay === d.dayNumber ? "text-emerald-900" : ""}`}
-                    >
-                      {d.dayName}
-                    </span>
-                    <span className="text-xl font-black leading-none mb-1">
-                      {d.dayNumber}
-                    </span>
-                    {!isScrolled && (
-                      <span
-                        className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-900/80" : "text-emerald-300/60"}`}
-                      >
-                        {d.formattedGregorian}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Mobile View Mode Toggle */}
           <div className="lg:hidden mt-4 flex bg-emerald-900/40 p-1 rounded-2xl border border-emerald-600/50 transition-all duration-300">
             <button
               onClick={() => setViewMode("tracker")}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ease-out ${
-                viewMode === "tracker"
-                  ? "bg-amber-400 text-emerald-950 shadow-md"
-                  : "text-emerald-100"
-              }`}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ease-out ${viewMode === "tracker"
+                ? "bg-amber-400 text-emerald-950 shadow-md"
+                : "text-emerald-100"
+                }`}
             >
               المتابع اليومي
             </button>
             <button
               onClick={() => setViewMode("checklist")}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ease-out ${
-                viewMode === "checklist"
-                  ? "bg-amber-400 text-emerald-950 shadow-md"
-                  : "text-emerald-100"
-              }`}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ease-out ${viewMode === "checklist"
+                ? "bg-amber-400 text-emerald-950 shadow-md"
+                : "text-emerald-100"
+                }`}
             >
               الجدول العام
             </button>
@@ -1612,11 +1756,10 @@ export function PlannerClient({ username }: { username: string }) {
                       <button
                         key={section.id}
                         onClick={() => setActiveSectionId(section.id)}
-                        className={`relative p-4 rounded-2xl border transition-all text-right group ${
-                          isActive
-                            ? "bg-emerald-600 border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
-                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300"
-                        }`}
+                        className={`relative p-4 rounded-2xl border transition-all text-right group ${isActive
+                          ? "bg-emerald-600 border-emerald-500 shadow-md ring-2 ring-emerald-500/20"
+                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300"
+                          }`}
                       >
                         <div
                           className={`text-xs font-bold mb-1 ${isActive ? "text-emerald-100" : "text-slate-400 dark:text-slate-500"}`}
@@ -1704,7 +1847,7 @@ export function PlannerClient({ username }: { username: string }) {
                                     onClick={() => {
                                       setModalType("add-task");
                                       setModalData({ sectionId: section.id });
-                                      setModalInputValue("");
+                                      setAddTaskForm(prev => ({ ...prev, title: "", isScheduled: false }));
                                     }}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                                   >
@@ -1786,6 +1929,33 @@ export function PlannerClient({ username }: { username: string }) {
               </button>
             </div>
 
+            <div className="pb-4 -mx-4 px-4 overflow-x-auto no-scrollbar flex gap-3">
+              {ramadanDays.map((d) => (
+                <button
+                  key={d.dayNumber}
+                  onClick={() => setSelectedDay(d.dayNumber)}
+                  className={`flex-shrink-0 w-16 h-20 rounded-2xl flex flex-col items-center justify-center transition-all border-2 ${selectedDay === d.dayNumber
+                    ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
+                    : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-emerald-300"
+                    }`}
+                >
+                  <span
+                    className={`text-[10px] font-bold mb-1 opacity-70 ${selectedDay === d.dayNumber ? "text-emerald-50" : ""}`}
+                  >
+                    {d.dayName}
+                  </span>
+                  <span className="text-xl font-black leading-none mb-1">
+                    {d.dayNumber}
+                  </span>
+                  <span
+                    className={`text-[9px] font-bold ${selectedDay === d.dayNumber ? "text-emerald-100/80" : "text-slate-400"}`}
+                  >
+                    {d.formattedGregorian}
+                  </span>
+                </button>
+              ))}
+            </div>
+
             {viewMode === "tracker" && (
               <div className="relative border-r-2 border-emerald-100 dark:border-emerald-900/50 pr-8 mr-4 space-y-6 py-4">
                 {plan.scheduledTasks
@@ -1797,19 +1967,17 @@ export function PlannerClient({ username }: { username: string }) {
                       <div key={task.id} className="relative group">
                         <div className="absolute -right-[41px] top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-emerald-500 border-4 border-white dark:border-slate-950 shadow-sm z-10" />
                         <div
-                          className={`card-hover p-4 md:p-6 rounded-3xl border transition-all flex items-center justify-between gap-4 ${
-                            isDone
-                              ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50"
-                              : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
-                          }`}
+                          className={`card-hover p-4 md:p-6 rounded-3xl border transition-all flex items-center justify-between gap-4 ${isDone
+                            ? "bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/50"
+                            : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm"
+                            }`}
                         >
                           <div className="flex items-center gap-4 flex-1">
                             <div
-                              className={`text-sm font-black px-3 py-1.5 rounded-xl ${
-                                isDone
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-                              }`}
+                              className={`text-sm font-black px-3 py-1.5 rounded-xl ${isDone
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                                }`}
                             >
                               {task.scheduledTime}
                             </div>
@@ -1817,11 +1985,10 @@ export function PlannerClient({ username }: { username: string }) {
                               onClick={() =>
                                 toggleTask(task.taskId, selectedDay)
                               }
-                              className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${
-                                isDone
-                                  ? "bg-emerald-500 border-emerald-600 shadow-inner"
-                                  : "bg-white dark:bg-slate-800 border-slate-200"
-                              }`}
+                              className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${isDone
+                                ? "bg-emerald-500 border-emerald-600 shadow-inner"
+                                : "bg-white dark:bg-slate-800 border-slate-200"
+                                }`}
                             >
                               {isDone && <IconCheck />}
                             </div>
@@ -1919,9 +2086,8 @@ export function PlannerClient({ username }: { username: string }) {
                   ))}
                 </select>
                 <div
-                  className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 transition-transform duration-200 ease-out ${
-                    isYearDropdownOpen ? "rotate-180" : ""
-                  }`}
+                  className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 transition-transform duration-200 ease-out ${isYearDropdownOpen ? "rotate-180" : ""
+                    }`}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -1976,11 +2142,10 @@ export function PlannerClient({ username }: { username: string }) {
                   <button
                     key={offset}
                     onClick={() => handleOffsetChange(offset)}
-                    className={`py-3 rounded-xl text-sm font-bold transition-all border-2 ${
-                      plan.ramadanOffset === offset
-                        ? "bg-amber-400 border-amber-300 text-emerald-950 shadow-md"
-                        : "bg-slate-50 dark:bg-slate-800 border-transparent text-slate-500 hover:border-slate-200 dark:hover:border-slate-700"
-                    }`}
+                    className={`py-3 rounded-xl text-sm font-bold transition-all border-2 ${plan.ramadanOffset === offset
+                      ? "bg-amber-400 border-amber-300 text-emerald-950 shadow-md"
+                      : "bg-slate-50 dark:bg-slate-800 border-transparent text-slate-500 hover:border-slate-200 dark:hover:border-slate-700"
+                      }`}
                   >
                     {offset > 0 ? `+${offset}` : offset}
                   </button>
@@ -2044,7 +2209,7 @@ export function PlannerClient({ username }: { username: string }) {
                       if (!locationForm.city) return "";
                       const englishCountryName =
                         countriesCacheRef.current?.english[
-                          locationForm.country
+                        locationForm.country
                         ] || locationForm.country;
                       const cached = citiesCacheRef.current[englishCountryName];
                       if (cached) {
@@ -2060,11 +2225,11 @@ export function PlannerClient({ username }: { username: string }) {
                     onChange={(val) => {
                       const englishCountryName =
                         countriesCacheRef.current?.english[
-                          locationForm.country
+                        locationForm.country
                         ] || locationForm.country;
                       const englishCityName =
                         citiesCacheRef.current[englishCountryName]?.english[
-                          val
+                        val
                         ] ?? val;
                       setLocationForm((prev) => ({
                         ...prev,
@@ -2079,7 +2244,7 @@ export function PlannerClient({ username }: { username: string }) {
                         onClick={() => {
                           const englishCountryName =
                             countriesCacheRef.current?.english[
-                              locationForm.country
+                            locationForm.country
                             ] || locationForm.country;
                           delete citiesCacheRef.current[englishCountryName];
                           setCities([]);
@@ -2259,6 +2424,143 @@ export function PlannerClient({ username }: { username: string }) {
               </button>
             </div>
           </div>
+        ) : modalType === "add-task" ? (
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                الاسم
+              </label>
+              <input
+                autoFocus
+                type="text"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                placeholder="أدخل اسم المهمة..."
+                value={addTaskForm.title}
+                onChange={(e) => setAddTaskForm(prev => ({ ...prev, title: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && handleModalSubmit()}
+              />
+            </div>
+
+            {/* Scheduling Toggle */}
+            <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <IconClock />
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                  جدولة تلقائية؟
+                </span>
+              </div>
+              <button
+                onClick={() => setAddTaskForm(prev => ({ ...prev, isScheduled: !prev.isScheduled }))}
+                className={`w-12 h-6 rounded-full transition-colors relative ${addTaskForm.isScheduled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
+              >
+                <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${addTaskForm.isScheduled ? "left-1" : "left-7"}`} />
+              </button>
+            </div>
+
+            {addTaskForm.isScheduled && (
+              <div className="space-y-4 animate-in slide-in-from-top-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+                    التكرار
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setAddTaskForm(prev => ({ ...prev, scheduleType: 'daily' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${addTaskForm.scheduleType === 'daily' ? 'bg-emerald-100 border-emerald-500 text-emerald-800' : 'bg-white dark:bg-slate-800 border-transparent text-slate-500'}`}
+                    >
+                      يومياً
+                    </button>
+                    <button
+                      onClick={() => setAddTaskForm(prev => ({ ...prev, scheduleType: 'weekly' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${addTaskForm.scheduleType === 'weekly' ? 'bg-emerald-100 border-emerald-500 text-emerald-800' : 'bg-white dark:bg-slate-800 border-transparent text-slate-500'}`}
+                    >
+                      أسبوعياً
+                    </button>
+                  </div>
+                </div>
+
+                {addTaskForm.scheduleType === 'weekly' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+                      يوم الأسبوع
+                    </label>
+                    <select
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all text-right"
+                      value={addTaskForm.selectedDayOfWeek}
+                      onChange={(e) => setAddTaskForm(prev => ({ ...prev, selectedDayOfWeek: Number(e.target.value) }))}
+                    >
+                      <option value="6">السبت</option>
+                      <option value="0">الأحد</option>
+                      <option value="1">الاثنين</option>
+                      <option value="2">الثلاثاء</option>
+                      <option value="3">الأربعاء</option>
+                      <option value="4">الخميس</option>
+                      <option value="5">الجمعة</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+                      الوقت
+                    </label>
+                    <input
+                      type="time"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-bold focus:ring-2 focus:ring-emerald-500 transition-all ltr:text-center text-center"
+                      value={addTaskForm.time}
+                      onChange={(e) => setAddTaskForm(prev => ({ ...prev, time: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+                      المدة (د)
+                    </label>
+                    <input
+                      type="number"
+                      min="5"
+                      step="5"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-bold focus:ring-2 focus:ring-emerald-500 transition-all text-center"
+                      value={addTaskForm.duration}
+                      onChange={(e) => setAddTaskForm(prev => ({ ...prev, duration: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Progress Bar (if syncing) */}
+            {syncProgress !== null && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                  <span>جاري الجدولة...</span>
+                  <span>{syncProgress}%</span>
+                </div>
+                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${syncProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleModalSubmit}
+                disabled={submitting || !addTaskForm.title.trim()}
+                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {submitting ? "جاري الحفظ..." : "حفظ المهمة"}
+              </button>
+              <button
+                onClick={() => setModalType(null)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-2.5 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             <div>
@@ -2275,6 +2577,24 @@ export function PlannerClient({ username }: { username: string }) {
                 onKeyDown={(e) => e.key === "Enter" && handleModalSubmit()}
               />
             </div>
+            {modalType === "edit-task" && (
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  القسم (التصنيف)
+                </label>
+                <select
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-900 dark:text-slate-100 cursor-pointer"
+                  value={modalSectionValue}
+                  onChange={(e) => setModalSectionValue(e.target.value)}
+                >
+                  {plan?.sections.map((sec) => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex gap-3 pt-2">
               <button
                 onClick={handleModalSubmit}
@@ -2298,9 +2618,94 @@ export function PlannerClient({ username }: { username: string }) {
       <Modal
         isOpen={trackerModalOpen}
         onClose={() => setTrackerModalOpen(false)}
-        title={`جدولة مهمة لليوم ${selectedDay}`}
+        title={
+          trackerForm.isRecurring
+            ? "جدولة مهمة متكررة"
+            : `جدولة مهمة لليوم ${selectedDay}`
+        }
       >
         <div className="space-y-5">
+          {/* Recurring Toggle */}
+          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              تكرار المهمة؟
+            </span>
+            <button
+              onClick={() =>
+                setTrackerForm((prev) => ({
+                  ...prev,
+                  isRecurring: !prev.isRecurring,
+                  scheduleType: !prev.isRecurring ? "daily" : "once",
+                }))
+              }
+              className={`w-12 h-6 rounded-full transition-colors relative ${trackerForm.isRecurring ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
+            >
+              <div
+                className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-all ${trackerForm.isRecurring ? "left-1" : "left-7"}`}
+              />
+            </button>
+          </div>
+
+          {trackerForm.isRecurring && (
+            <div className="space-y-3 animate-in slide-in-from-top-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+                  التكرار
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      setTrackerForm((prev) => ({
+                        ...prev,
+                        scheduleType: "daily",
+                      }))
+                    }
+                    className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${trackerForm.scheduleType === "daily" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white dark:bg-slate-800 border-transparent text-slate-500"}`}
+                  >
+                    يومياً (كل أيام رمضان)
+                  </button>
+                  <button
+                    onClick={() =>
+                      setTrackerForm((prev) => ({
+                        ...prev,
+                        scheduleType: "weekly",
+                      }))
+                    }
+                    className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${trackerForm.scheduleType === "weekly" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white dark:bg-slate-800 border-transparent text-slate-500"}`}
+                  >
+                    أسبوعياً
+                  </button>
+                </div>
+              </div>
+
+              {trackerForm.scheduleType === "weekly" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+                    يوم الأسبوع
+                  </label>
+                  <select
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all text-right"
+                    value={trackerForm.selectedDayOfWeek}
+                    onChange={(e) =>
+                      setTrackerForm((prev) => ({
+                        ...prev,
+                        selectedDayOfWeek: Number(e.target.value),
+                      }))
+                    }
+                  >
+                    <option value="6">السبت</option>
+                    <option value="0">الأحد</option>
+                    <option value="1">الاثنين</option>
+                    <option value="2">الثلاثاء</option>
+                    <option value="3">الأربعاء</option>
+                    <option value="4">الخميس</option>
+                    <option value="5">الجمعة</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
@@ -2308,7 +2713,7 @@ export function PlannerClient({ username }: { username: string }) {
               </label>
               <input
                 type="time"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-bold focus:ring-2 focus:ring-emerald-500 transition-all ltr:text-center text-center"
                 value={trackerForm.time}
                 onChange={(e) =>
                   setTrackerForm((prev) => ({ ...prev, time: e.target.value }))
@@ -2317,22 +2722,41 @@ export function PlannerClient({ username }: { username: string }) {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
-                نوع المهمة
+                المدة (دقيقة)
               </label>
-              <select
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
-                value={trackerForm.taskId ? "existing" : "new"}
+              <input
+                type="number"
+                min="5"
+                step="5"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-lg font-bold focus:ring-2 focus:ring-emerald-500 transition-all text-center"
+                value={trackerForm.duration}
                 onChange={(e) =>
                   setTrackerForm((prev) => ({
                     ...prev,
-                    taskId: e.target.value === "new" ? "" : "placeholder",
+                    duration: Number(e.target.value),
                   }))
                 }
-              >
-                <option value="existing">من الخطة الحالية</option>
-                <option value="new">مهمة جديدة بالكامل</option>
-              </select>
+              />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 mr-1">
+              المهمة
+            </label>
+            <select
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-emerald-500 transition-all"
+              value={trackerForm.taskId ? "existing" : "new"}
+              onChange={(e) =>
+                setTrackerForm((prev) => ({
+                  ...prev,
+                  taskId: e.target.value === "new" ? "" : "placeholder",
+                }))
+              }
+            >
+              <option value="existing">من الخطة الحالية</option>
+              <option value="new">مهمة جديدة بالكامل</option>
+            </select>
           </div>
 
           {trackerForm.taskId !== "" ? (
@@ -2408,6 +2832,22 @@ export function PlannerClient({ username }: { username: string }) {
             </div>
           )}
 
+          {/* Progress Bar (if syncing) */}
+          {syncProgress !== null && (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                <span>جاري الجدولة...</span>
+                <span>{syncProgress}%</span>
+              </div>
+              <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                  style={{ width: `${syncProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 pt-4">
             <button
               onClick={handleTrackerSubmit}
@@ -2462,13 +2902,12 @@ export function PlannerClient({ username }: { username: string }) {
       {/* --- Notification Toast --- */}
       {notification && (
         <div
-          className={`fixed bottom-6 left-6 z-[200] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 duration-300 ${
-            notification.type === "success"
-              ? "bg-emerald-600 text-white"
-              : notification.type === "loading"
-                ? "bg-slate-800 text-white"
-                : "bg-amber-500 text-white"
-          }`}
+          className={`fixed bottom-6 left-6 z-[200] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 duration-300 ${notification.type === "success"
+            ? "bg-emerald-600 text-white"
+            : notification.type === "loading"
+              ? "bg-slate-800 text-white"
+              : "bg-amber-500 text-white"
+            }`}
         >
           {notification.type === "loading" ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
