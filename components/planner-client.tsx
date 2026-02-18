@@ -16,6 +16,8 @@ import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
 import { SearchableSelect } from "./ui/searchable-select";
 import { getRamadanDays } from "@/lib/date-utils";
+import { CreateCategoryModal } from "./create-category-modal";
+import { CreateTaskModal } from "./create-task-modal";
 import { CalendarView } from "./calendar-view";
 
 // --- Icons ---
@@ -613,6 +615,10 @@ export function PlannerClient({ username }: { username: string }) {
   >(null);
   const [modalData, setModalData] = useState<any>(null);
   const [modalInputValue, setModalInputValue] = useState("");
+  
+  // New Modals State
+  const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
 
   // Sync checkins map whenever plan data changes
   const [checkins, setCheckins] = useState<Record<string, boolean>>({});
@@ -1373,17 +1379,19 @@ export function PlannerClient({ username }: { username: string }) {
                 <div className="bg-emerald-700 dark:bg-emerald-800 p-2.5 rounded-2xl shadow-inner transition-colors duration-300">
                   <IconMoon />
                 </div>
-                <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide transition-colors duration-300">
-                  رفيق رمضان
-                </h1>
+                <div>
+                  <h1 className="text-xl md:text-3xl font-bold font-amiri tracking-wide transition-colors duration-300">
+                    رفيق رمضان
+                  </h1>
+                  <p className="welcome-text text-xs text-emerald-200/80">
+                    مرحباً، {username}
+                  </p>
+                </div>
               </div>
-              <p className="welcome-text text-xs text-emerald-200/80">
-                مرحباً، {username}
-              </p>
             </div>
 
             {/* Center Zone (Tabs) */}
-            <div className="hidden lg:flex flex-grow justify-center items-center">
+            <div className="hidden lg:flex flex-grow justify-center items-center gap-4">
               <div className="flex bg-emerald-900/40 p-1 rounded-xl border border-emerald-600/50 transition-all duration-300">
                 <button
                   onClick={() => setViewMode("tracker")}
@@ -1407,6 +1415,7 @@ export function PlannerClient({ username }: { username: string }) {
                 </button>
               </div>
             </div>
+
 
             {/* Left Zone (Controls) */}
             <div className="hidden lg:flex items-center gap-2">
@@ -1631,6 +1640,18 @@ export function PlannerClient({ username }: { username: string }) {
               </div>
             )}
 
+            <div className="flex justify-between items-center no-print">
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                أقسام الجدول
+              </h2>
+              <button
+                onClick={() => setIsCreateCategoryOpen(true)}
+                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md flex items-center gap-2 text-sm"
+              >
+                <IconPlus /> إضافة قسم جديد
+              </button>
+            </div>
+
             <DragDropContext onDragEnd={onDragEnd}>
               <Droppable droppableId="sections" type="section">
                 {(provided) => (
@@ -1758,10 +1779,10 @@ export function PlannerClient({ username }: { username: string }) {
               </h2>
 
               <button
-                onClick={() => setTrackerModalOpen(true)}
+                onClick={() => setIsCreateTaskOpen(true)}
                 className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
               >
-                <IconPlus /> إضافة نشاط للجدول
+                <IconPlus /> إضافة عبادة جديدة
               </button>
             </div>
 
@@ -2408,6 +2429,35 @@ export function PlannerClient({ username }: { username: string }) {
           </div>
         </div>
       </Modal>
+
+      {/* --- New Modals --- */}
+      {plan && (
+        <>
+          <CreateCategoryModal
+            isOpen={isCreateCategoryOpen}
+            onClose={() => setIsCreateCategoryOpen(false)}
+            planId={plan.planId}
+            ramadanDays={ramadanDays}
+            onSuccess={() => {
+              mutate();
+              setNotification({ message: "تم إنشاء القسم بنجاح", type: "success" });
+              setTimeout(() => setNotification(null), 3000);
+            }}
+          />
+          <CreateTaskModal
+            isOpen={isCreateTaskOpen}
+            onClose={() => setIsCreateTaskOpen(false)}
+            planId={plan.planId}
+            sections={plan.sections}
+            ramadanDays={ramadanDays}
+            onSuccess={() => {
+              mutate();
+              setNotification({ message: "تم إنشاء المهمة وجدولتها بنجاح", type: "success" });
+              setTimeout(() => setNotification(null), 3000);
+            }}
+          />
+        </>
+      )}
 
       {/* --- Notification Toast --- */}
       {notification && (
