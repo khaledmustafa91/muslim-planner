@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth";
 import { badRequest } from "@/lib/validation";
-import { scheduleTask, createTask, assertSectionOwnership, assertTaskOwnership, deleteScheduledTask, assertScheduledTaskOwnership, updateTaskSchedule } from "@/lib/db";
+import { scheduleTask, createTask, assertSectionOwnership, assertTaskOwnership, deleteScheduledTask, deleteFutureScheduledTasks, assertScheduledTaskOwnership, updateTaskSchedule } from "@/lib/db";
 
 export async function PATCH(request: NextRequest) {
   const session = await getSessionFromCookies();
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // If no taskId, we're creating a new task
     if (!taskId) {
       if (!sectionId || !title) return badRequest("يجب اختيار القسم واسم المهمة");
-      
+
       const ownership = await assertSectionOwnership(sectionId, session.userId);
       if (!ownership) return badRequest("غير مصرح", 403);
 
@@ -63,16 +63,32 @@ export async function DELETE(request: NextRequest) {
   if (!session) return badRequest("غير مصرح", 401);
 
   const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-
-  if (!id) return badRequest("معرف غير صالح");
+  const isFuture = searchParams.get("future") === "true";
 
   try {
-    const owned = await assertScheduledTaskOwnership(id, session.userId);
-    if (!owned) return badRequest("غير مصرح", 403);
+    if (isFuture) {
+      const taskId = searchParams.get("taskId");
+      const fromDay = Number(searchParams.get("fromDay"));
 
-    await deleteScheduledTask(id);
-    return NextResponse.json({ ok: true });
+      if (!taskId || !fromDay) return badRequest("البيانات ناقصة (taskId, fromDay)");
+
+      // Verify ownership of the Task
+      const taskOwned = await assertTaskOwnership(taskId, session.userId);
+      if (!taskOwned) return badRequest("غير مصرح", 403);
+
+      await deleteFutureScheduledTasks(taskId, fromDay);
+      return NextResponse.json({ ok: true });
+    } else {
+      // Single deletion
+      const id = searchParams.get("id");
+      if (!id) return badRequest("معرف غير صالح");
+
+      const owned = await assertScheduledTaskOwnership(id, session.userId);
+      if (!owned) return badRequest("غير مصرح", 403);
+
+      await deleteScheduledTask(id);
+      return NextResponse.json({ ok: true });
+    }
   } catch (error) {
     console.error("[TRACKER_DELETE_ERROR]", error);
     return badRequest("تعذر حذف المهمة");
