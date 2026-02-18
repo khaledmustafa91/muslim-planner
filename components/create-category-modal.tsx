@@ -31,12 +31,7 @@ export function CreateCategoryModal({
       if (confirm("هل تريد الإلغاء؟ سيتم فقدان ما أدخلته.")) {
         resetForm();
         onClose();
-      }
-    } else {
-      resetForm();
-      onClose();
-    }
-  };
+    };
 
   const handleSubmit = async () => {
     if (!categoryName.trim()) return;

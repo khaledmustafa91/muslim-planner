@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Modal } from "./ui/modal";
+import { ConfirmModal } from "./ui/confirm-modal";
 import { ScheduleForm, ScheduleData } from "./schedule-form";
 import { RamadanDay } from "@/lib/date-utils";
 import { PlannerSection } from "@/lib/types";
@@ -23,20 +24,16 @@ export function CreateTaskModal({
   onSuccess,
   initialSectionId,
 }: CreateTaskModalProps) {
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+    const [step, setStep] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [showConfirmClose, setShowConfirmClose] = useState(false);
 
-  // Form State
-  const [taskName, setTaskName] = useState("");
-  const [selectedSectionId, setSelectedSectionId] = useState("");
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [isNewCategory, setIsNewCategory] = useState(false);
-  
-  const [schedule, setSchedule] = useState<ScheduleData>({
-    type: "one-time",
-    time: "12:00",
-  });
+    // Form State
+    const [taskName, setTaskName] = useState("");
+    const [selectedSectionId, setSelectedSectionId] = useState("");
+    const [newCategoryName, setNewCategoryName] = useState("");
+    const [isNewCategory, setIsNewCategory] = useState(false);
 
   // Handle initialSectionId prop
   useEffect(() => {
@@ -68,93 +65,35 @@ export function CreateTaskModal({
       if (confirm("هل تريد الإلغاء؟ سيتم فقدان ما أدخلته.")) {
         resetForm();
         onClose();
-      }
-    } else {
-      resetForm();
-      onClose();
-    }
-  };
+    };
 
-  const handleSubmit = async () => {
-    setLoading(true);
-    setError(null);
+    const handleSubmit = async () => {
+        setLoading(true);
+        setError(null);
 
-    try {
-      let sectionId = selectedSectionId;
+        try {
+            let sectionId = selectedSectionId;
 
-      // 1. Create New Category if needed
-      if (isNewCategory) {
-          const sectionRes = await fetch("/api/sections", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ planId, title: newCategoryName }),
-          });
-          const sectionData = await sectionRes.json();
-          if (!sectionRes.ok) throw new Error(sectionData.error || "فشل إنشاء القسم");
-          sectionId = sectionData.section.id;
-      }
-
-      // 2. Create Task
-      const taskRes = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId, title: taskName, type: "regular" }),
-      });
-      const taskData = await taskRes.json();
-      if (!taskRes.ok) throw new Error(taskData.error || "فشل إنشاء المهمة");
-
-      const taskId = taskData.task.id;
-
-      // 3. Schedule Task
-      const duration = 30; // default
-
-        // Helper to schedule call
-        const scheduleCall = async (day: number, time: string) => {
-             await fetch("/api/daily-tracker", {
-                method: "POST",
-                body: JSON.stringify({
-                    taskId,
-                    dayNumber: day,
-                    time,
-                    duration
-                })
-             });
-        };
-
-        if (schedule.type === "one-time") {
-             if (schedule.dayNumber) {
-                 await scheduleCall(schedule.dayNumber, schedule.time);
-             }
-        } else {
-            // Recurring
-            const daysToSchedule = ramadanDays.filter(d => {
-                if (schedule.recurrenceType === "daily") return true;
-                if (schedule.recurrenceType === "weekly") {
-                    return schedule.daysOfWeek?.includes(d.gregorianDate.getDay());
-                }
-                return false;
-            });
-
-            for (const day of daysToSchedule) {
-                 const times = (schedule.times && schedule.times.length > 0) 
-                    ? schedule.times 
-                    : [schedule.time];
-
-                 for (const t of times) {
-                     await scheduleCall(day.dayNumber, t);
-                 }
+            // 1. Create New Category if needed
+            if (isNewCategory) {
+                const sectionRes = await fetch("/api/sections", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ planId, title: newCategoryName }),
+                });
+                const sectionData = await sectionRes.json();
+                if (!sectionRes.ok) throw new Error(sectionData.error || "فشل إنشاء القسم");
+                sectionId = sectionData.section.id;
             }
-        }
 
-      onSuccess();
-      resetForm();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "حدث خطأ غير متوقع");
-    } finally {
-      setLoading(false);
-    }
-  };
+            // 2. Create Task
+            const taskRes = await fetch("/api/tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sectionId, title: taskName, type: "regular" }),
+            });
+            const taskData = await taskRes.json();
+            if (!taskRes.ok) throw new Error(taskData.error || "فشل إنشاء المهمة");
 
   const isStep1Valid = useMemo(() => {
      const isNameValid = taskName.trim().length > 0;
