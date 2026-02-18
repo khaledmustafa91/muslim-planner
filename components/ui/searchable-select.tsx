@@ -75,7 +75,7 @@ export function SearchableSelect({
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute z-[100] w-full mt-1 max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl no-scrollbar animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="dropdown-enter absolute z-[100] w-full mt-1 max-h-60 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl no-scrollbar">
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button

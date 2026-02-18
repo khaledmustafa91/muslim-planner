@@ -34,3 +34,120 @@
 .checkbox-wrapper:active {
   transform: scale(0.9);
 }
+
+.navbar-bottom {
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.35s ease-out;
+}
+
+.navbar-bottom.hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.right-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.logo-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.welcome-text {
+  font-size: 0.75rem;
+  margin-top: 4px;
+  text-align: right;
+}
+
+/* Enhanced animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Button animations */
+button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Progress bar animation */
+.progress-bar {
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tab content transition */
+.tab-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Dropdown animations */
+.dropdown-enter {
+  animation: slideUp 0.2s ease-out;
+}
+
+.logout-button {
+  color: #b5451b;
+  transition: filter 0.2s ease;
+}
+
+.dark .logout-button {
+  color: #e8825a;
+}
+
+.logout-button:hover {
+  filter: brightness(1.15);
+}
