@@ -634,6 +634,7 @@ export function PlannerClient({ username }: { username: string }) {
   // New Modals State
   const [isCreateCategoryOpen, setIsCreateCategoryOpen] = useState(false);
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [initialSectionIdForTask, setInitialSectionIdForTask] = useState<string | undefined>(undefined);
 
   // Sync checkins map whenever plan data changes
   const [checkins, setCheckins] = useState<Record<string, boolean>>({});
@@ -1845,9 +1846,8 @@ export function PlannerClient({ username }: { username: string }) {
                                 <div className="no-print flex flex-wrap gap-2 items-center">
                                   <button
                                     onClick={() => {
-                                      setModalType("add-task");
-                                      setModalData({ sectionId: section.id });
-                                      setAddTaskForm(prev => ({ ...prev, title: "", isScheduled: false }));
+                                      setInitialSectionIdForTask(section.id);
+                                      setIsCreateTaskOpen(true);
                                     }}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                                   >
@@ -1922,7 +1922,10 @@ export function PlannerClient({ username }: { username: string }) {
               </h2>
 
               <button
-                onClick={() => setIsCreateTaskOpen(true)}
+                onClick={() => {
+                  setInitialSectionIdForTask(undefined);
+                  setIsCreateTaskOpen(true);
+                }}
                 className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
               >
                 <IconPlus /> إضافة عبادة جديدة
@@ -2877,7 +2880,6 @@ export function PlannerClient({ username }: { username: string }) {
             isOpen={isCreateCategoryOpen}
             onClose={() => setIsCreateCategoryOpen(false)}
             planId={plan.planId}
-            ramadanDays={ramadanDays}
             onSuccess={() => {
               mutate();
               setNotification({ message: "تم إنشاء القسم بنجاح", type: "success" });
@@ -2890,6 +2892,7 @@ export function PlannerClient({ username }: { username: string }) {
             planId={plan.planId}
             sections={plan.sections}
             ramadanDays={ramadanDays}
+            initialSectionId={initialSectionIdForTask}
             onSuccess={() => {
               mutate();
               setNotification({ message: "تم إنشاء المهمة وجدولتها بنجاح", type: "success" });
