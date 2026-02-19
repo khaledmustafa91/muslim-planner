@@ -139,13 +139,13 @@ export function AuthForm({ mode }: AuthFormProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  maxLength={72}
+                  maxLength={20}
                   placeholder="••••••••"
                 />
               </div>
               {mode === "signup" && (
                 <p className="text-xs text-slate-400 dark:text-slate-500 mr-1 text-right">
-                  6 أحرف على الأقل · حتى 72 حرفًا
+                  6 أحرف على الأقل · حتى 20 حرفًا
                 </p>
               )}
             </div>
@@ -164,7 +164,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     minLength={6}
-                    maxLength={72}
+                    maxLength={20}
                     placeholder="••••••••"
                   />
                 </div>

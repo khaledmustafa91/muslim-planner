@@ -10,8 +10,8 @@ export function validateCredentials(username: unknown, password: unknown): strin
     return "اسم المستخدم يجب أن يكون بين 3 و 32 حرفًا";
   }
 
-  if (password.length < 6 || password.length > 72) {
-    return "كلمة المرور يجب أن تكون بين 6 و 72 حرفًا";
+  if (password.length < 6 || password.length > 20) {
+    return "كلمة المرور يجب أن تكون بين 6 و 20 حرفًا";
   }
 
   return null;
