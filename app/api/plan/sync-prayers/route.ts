@@ -42,7 +42,19 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const numericHijriYear = plan.ramadanYear;
+        function getHijriYearForRamadan(gregorianYear: number): number {
+          for (let d = 0; d < 366; d++) {
+            const date = new Date(gregorianYear, 0, d + 1);
+            const fmt = (opt: Intl.DateTimeFormatOptions) =>
+              new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', opt).format(date);
+            if (fmt({ month: 'numeric' }) === "9" && fmt({ day: 'numeric' }) === "1") {
+              return parseInt(fmt({ year: 'numeric' }));
+            }
+          }
+          return gregorianYear + 579; // fallback approximation
+        }
+
+        const numericHijriYear = getHijriYearForRamadan(plan.ramadanYear);
 
         const apiUrl = `https://api.aladhan.com/v1/hijriCalendarByCity/${numericHijriYear}/9?city=${plan.locationCity}&country=${plan.locationCountry}&method=${plan.calculationMethod ?? 2}`;
 
