@@ -21,6 +21,15 @@ import { CreateTaskModal } from "./create-task-modal";
 import { EditTaskModal } from "./edit-task-modal";
 import { CalendarView } from "./calendar-view";
 
+// --- Geo cache constants ---
+const GEO_CACHE_VERSION = 1;
+const GEO_CACHE_KEYS = {
+  countriesVersion: "geo_countries_version",
+  countries: "geo_countries",
+  citiesVersion: "geo_cities_version",
+  cities: "geo_cities",
+};
+
 // --- Icons ---
 const IconCheck = () => (
   <svg
@@ -446,6 +455,26 @@ export function PlannerClient({ username }: { username: string }) {
     Record<string, { arabic: string[]; english: Record<string, string> }>
   >({});
 
+  // Pre-populate geo caches from localStorage (runs once, before fetch effects)
+  const geoLocalStorageInitialized = useRef(false);
+  if (!geoLocalStorageInitialized.current) {
+    geoLocalStorageInitialized.current = true;
+    try {
+      const versionRaw = localStorage.getItem(GEO_CACHE_KEYS.countriesVersion);
+      if (Number(versionRaw) === GEO_CACHE_VERSION) {
+        const raw = localStorage.getItem(GEO_CACHE_KEYS.countries);
+        if (raw) countriesCacheRef.current = JSON.parse(raw);
+      }
+      const citiesVersionRaw = localStorage.getItem(GEO_CACHE_KEYS.citiesVersion);
+      if (Number(citiesVersionRaw) === GEO_CACHE_VERSION) {
+        const raw = localStorage.getItem(GEO_CACHE_KEYS.cities);
+        if (raw) citiesCacheRef.current = JSON.parse(raw);
+      }
+    } catch {
+      // localStorage unavailable or corrupted — ignore, will re-fetch
+    }
+  }
+
   // Initialize AOS (Animate On Scroll) once on mount
   useEffect(() => {
     AOS.init({
@@ -476,6 +505,12 @@ export function PlannerClient({ username }: { username: string }) {
           arabic: data.arabic,
           english: data.english,
         };
+        try {
+          localStorage.setItem(GEO_CACHE_KEYS.countriesVersion, String(GEO_CACHE_VERSION));
+          localStorage.setItem(GEO_CACHE_KEYS.countries, JSON.stringify(countriesCacheRef.current));
+        } catch {
+          // quota exceeded or unavailable — ignore
+        }
         setCountries(data.arabic);
         setGeoError((prev) => ({ ...prev, countries: undefined }));
       } catch (err) {
@@ -522,6 +557,12 @@ export function PlannerClient({ username }: { username: string }) {
           arabic: data.arabic,
           english: data.english,
         };
+        try {
+          localStorage.setItem(GEO_CACHE_KEYS.citiesVersion, String(GEO_CACHE_VERSION));
+          localStorage.setItem(GEO_CACHE_KEYS.cities, JSON.stringify(citiesCacheRef.current));
+        } catch {
+          // quota exceeded or unavailable — ignore
+        }
         setCities(data.arabic);
         setGeoError((prev) => ({ ...prev, cities: undefined }));
       } catch (err) {
