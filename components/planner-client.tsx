@@ -20,6 +20,7 @@ import { CreateCategoryModal } from "./create-category-modal";
 import { CreateTaskModal } from "./create-task-modal";
 import { EditTaskModal } from "./edit-task-modal";
 import { CalendarView } from "./calendar-view";
+import { InstallAppPrompt } from "./install-app-prompt";
 
 // --- Geo cache constants ---
 const GEO_CACHE_VERSION = 1;
@@ -2076,14 +2077,21 @@ export function PlannerClient({ username }: { username: string }) {
           </div>
         )}
 
-        <div className="mt-12 text-center text-slate-400 dark:text-slate-500 text-xs no-print flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>يتم حفظ جميع التغييرات تلقائياً</span>
-          </div>
-          <p>© {new Date().getFullYear()} رمضان مبارك</p>
-        </div>
       </main>
+
+      <footer className="mt-12 py-12 border-t border-slate-200 dark:border-slate-800 no-print">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <InstallAppPrompt />
+
+          <div className="mt-8 text-center text-slate-400 dark:text-slate-500 text-xs flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>يتم حفظ جميع التغييرات تلقائياً</span>
+            </div>
+            <p>© {new Date().getFullYear()} رمضان مبارك</p>
+          </div>
+        </div>
+      </footer>
 
       {/* --- Modals --- */}
       <Modal
