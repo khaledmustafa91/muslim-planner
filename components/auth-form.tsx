@@ -47,6 +47,12 @@ export function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
     setError(null);
 
+    if (mode === "signup" && !/^[^\u0600-\u06FF\s]+$/.test(username.trim())) {
+      setError("اسم المستخدم يجب أن يحتوي على حروف إنجليزية أو رموز بدون مسافات أو حروف عربية");
+      setLoading(false);
+      return;
+    }
+
     if (mode === "signup" && password !== confirmPassword) {
       setError("كلمات المرور غير متطابقة");
       setLoading(false);
@@ -113,6 +119,11 @@ export function AuthForm({ mode }: AuthFormProps) {
                   placeholder="أدخل اسم المستخدم"
                 />
               </div>
+              {mode === "signup" && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mr-1 text-right">
+                  3-32 حرفًا · حروف إنجليزية، أرقام، ورموز · بدون مسافات أو حروف عربية
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -128,10 +139,15 @@ export function AuthForm({ mode }: AuthFormProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  maxLength={72}
+                  maxLength={20}
                   placeholder="••••••••"
                 />
               </div>
+              {mode === "signup" && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mr-1 text-right">
+                  6 أحرف على الأقل · حتى 20 حرفًا
+                </p>
+              )}
             </div>
 
             {mode === "signup" && (
@@ -148,7 +164,7 @@ export function AuthForm({ mode }: AuthFormProps) {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
                     minLength={6}
-                    maxLength={72}
+                    maxLength={20}
                     placeholder="••••••••"
                   />
                 </div>

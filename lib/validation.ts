@@ -10,10 +10,17 @@ export function validateCredentials(username: unknown, password: unknown): strin
     return "اسم المستخدم يجب أن يكون بين 3 و 32 حرفًا";
   }
 
-  if (password.length < 6 || password.length > 72) {
-    return "كلمة المرور يجب أن تكون بين 6 و 72 حرفًا";
+  if (password.length < 6 || password.length > 20) {
+    return "كلمة المرور يجب أن تكون بين 6 و 20 حرفًا";
   }
 
+  return null;
+}
+
+export function validateUsernameFormat(username: string): string | null {
+  if (!/^[^\u0600-\u06FF\s]+$/.test(username.trim())) {
+    return "اسم المستخدم يجب أن يحتوي على حروف إنجليزية أو رموز بدون مسافات أو حروف عربية";
+  }
   return null;
 }
 

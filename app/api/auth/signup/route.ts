@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { createUser, findUserByUsername } from "@/lib/db";
 import { setSessionCookie } from "@/lib/auth";
-import { badRequest, normalizeUsername, validateCredentials } from "@/lib/validation";
+import { badRequest, normalizeUsername, validateCredentials, validateUsernameFormat } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -12,6 +12,11 @@ export async function POST(request: NextRequest) {
   const validationError = validateCredentials(username, password);
   if (validationError) {
     return badRequest(validationError);
+  }
+
+  const formatError = validateUsernameFormat(username);
+  if (formatError) {
+    return badRequest(formatError);
   }
 
   const normalizedUsername = normalizeUsername(username);
