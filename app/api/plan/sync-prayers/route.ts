@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
         const numericHijriYear = getHijriYearForRamadan(plan.ramadanYear);
 
-        const apiUrl = `https://api.aladhan.com/v1/hijriCalendarByCity/${numericHijriYear}/9?city=${plan.locationCity}&country=${plan.locationCountry}&method=${plan.calculationMethod ?? 2}`;
+        const apiUrl = `https://api.aladhan.com/v1/hijriCalendarByCity/${numericHijriYear}/9?city=${plan.locationCity}&country=${plan.locationCountry}&method=${plan.calculationMethod ?? 5}`;
 
         const response = await fetch(apiUrl);
         const data = await response.json();
