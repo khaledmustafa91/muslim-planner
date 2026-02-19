@@ -18,6 +18,7 @@ import { SearchableSelect } from "./ui/searchable-select";
 import { getRamadanDays } from "@/lib/date-utils";
 import { CreateCategoryModal } from "./create-category-modal";
 import { CreateTaskModal } from "./create-task-modal";
+import { EditTaskModal } from "./edit-task-modal";
 import { CalendarView } from "./calendar-view";
 
 // --- Icons ---
@@ -1121,14 +1122,6 @@ export function PlannerClient({ username }: { username: string }) {
           method: "PATCH",
           body: JSON.stringify({ title: value }),
         });
-      } else if (modalType === "edit-task") {
-        await api(`/api/tasks/${modalData.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            title: value,
-            sectionId: modalSectionValue,
-          }),
-        });
       } else if (modalType === "delete-confirm") {
         const url =
           modalData.type === "section"
@@ -2046,7 +2039,7 @@ export function PlannerClient({ username }: { username: string }) {
 
       {/* --- Modals --- */}
       <Modal
-        isOpen={!!modalType}
+        isOpen={!!modalType && modalType !== "edit-task"}
         onClose={() => setModalType(null)}
         title={
           modalType === "add-section"
@@ -2055,13 +2048,11 @@ export function PlannerClient({ username }: { username: string }) {
               ? "تعديل القسم"
               : modalType === "add-task"
                 ? "إضافة مهمة جديدة"
-                : modalType === "edit-task"
-                  ? "تعديل المهمة"
-                  : modalType === "reset-confirm"
-                    ? "تصفير المتابعة"
-                    : modalType === "plan-settings"
-                      ? "إعدادات الخطة"
-                      : "تأكيد الحذف"
+                : modalType === "reset-confirm"
+                  ? "تصفير المتابعة"
+                  : modalType === "plan-settings"
+                    ? "إعدادات الخطة"
+                    : "تأكيد الحذف"
         }
       >
         {modalType === "plan-settings" ? (
@@ -2580,24 +2571,7 @@ export function PlannerClient({ username }: { username: string }) {
                 onKeyDown={(e) => e.key === "Enter" && handleModalSubmit()}
               />
             </div>
-            {modalType === "edit-task" && (
-              <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  القسم (التصنيف)
-                </label>
-                <select
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-900 dark:text-slate-100 cursor-pointer"
-                  value={modalSectionValue}
-                  onChange={(e) => setModalSectionValue(e.target.value)}
-                >
-                  {plan?.sections.map((sec) => (
-                    <option key={sec.id} value={sec.id}>
-                      {sec.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Removed inline edit-task block */}
             <div className="flex gap-3 pt-2">
               <button
                 onClick={handleModalSubmit}
@@ -2899,6 +2873,24 @@ export function PlannerClient({ username }: { username: string }) {
               setTimeout(() => setNotification(null), 3000);
             }}
           />
+          {modalType === "edit-task" && modalData && (
+            <EditTaskModal
+              isOpen={modalType === "edit-task"}
+              onClose={() => setModalType(null)}
+              task={modalData}
+              sectionId={modalSectionValue || plan.sections[0]?.id}
+              sections={plan.sections}
+              ramadanDays={ramadanDays}
+              planId={plan.planId}
+              year={year}
+              currentDay={selectedDay}
+              onSuccess={() => {
+                mutate();
+                setNotification({ message: "تم تحديث المهمة بنجاح", type: "success" });
+                setTimeout(() => setNotification(null), 3000);
+              }}
+            />
+          )}
         </>
       )}
 

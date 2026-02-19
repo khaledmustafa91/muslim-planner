@@ -103,8 +103,8 @@ export async function getPlanProgress(planId: string): Promise<number> {
 export async function getPlanByYear(userId: string, ramadanYear: number): Promise<PlanResponse> {
   const planId = await getOrCreatePlan(userId, ramadanYear);
 
-  const planRow = await sql<{ 
-    day_count: 29 | 30; 
+  const planRow = await sql<{
+    day_count: 29 | 30;
     ramadan_offset: number;
     location_city: string | null;
     location_country: string | null;
@@ -239,6 +239,13 @@ export async function scheduleTasksBatch(
 
 export async function deleteScheduledTask(scheduledId: string): Promise<void> {
   await sql`DELETE FROM task_schedules WHERE id = ${scheduledId}`;
+}
+
+export async function deleteFutureScheduledTasks(taskId: string, fromDay: number): Promise<void> {
+  await sql`
+    DELETE FROM task_schedules 
+    WHERE task_id = ${taskId} AND day_number >= ${fromDay}
+  `;
 }
 
 export async function updateTaskSchedule(id: string, time?: string, duration?: number): Promise<void> {
