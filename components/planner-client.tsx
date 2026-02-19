@@ -2920,6 +2920,7 @@ export function PlannerClient({ username }: { username: string }) {
             isOpen={isCreateTaskOpen}
             onClose={() => setIsCreateTaskOpen(false)}
             planId={plan.planId}
+            year={year}
             sections={plan.sections}
             ramadanDays={ramadanDays}
             initialSectionId={initialSectionIdForTask}

@@ -9,6 +9,7 @@ interface CreateTaskModalProps {
     isOpen: boolean;
     onClose: () => void;
     planId: string;
+    year: number;
     sections: PlannerSection[];
     ramadanDays: RamadanDay[];
     onSuccess: () => void;
@@ -19,6 +20,7 @@ export function CreateTaskModal({
     isOpen,
     onClose,
     planId,
+    year,
     sections,
     ramadanDays,
     onSuccess,
@@ -36,7 +38,7 @@ export function CreateTaskModal({
     const [isNewCategory, setIsNewCategory] = useState(false);
 
     const [schedule, setSchedule] = useState<ScheduleData>({
-        type: "one-time",
+        type: "none",
         time: "12:00",
     });
 
@@ -60,7 +62,7 @@ export function CreateTaskModal({
         setSelectedSectionId(initialSectionId || "");
         setNewCategoryName("");
         setIsNewCategory(false);
-        setSchedule({ type: "one-time", time: "12:00" });
+        setSchedule({ type: "none", time: "12:00" });
         setError(null);
     };
 
@@ -114,44 +116,49 @@ export function CreateTaskModal({
 
             const taskId = taskData.task.id;
 
-            // 3. Schedule Task
-            const duration = 30; // default
-
-            // Helper to schedule call
-            const scheduleCall = async (day: number, time: string) => {
-                await fetch("/api/daily-tracker", {
+            // 3. Schedule Task via batch endpoint
+            const batchSchedule = async (scheduleType: string, time: string, selectedDate?: number, selectedDayOfWeek?: number) => {
+                const res = await fetch("/api/tasks/schedule-recurring", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        planId,
+                        year,
                         taskId,
-                        dayNumber: day,
+                        scheduleType,
                         time,
-                        duration
+                        duration: 30,
+                        selectedDate,
+                        selectedDayOfWeek,
                     })
                 });
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "فشل جدولة المهمة");
+                }
             };
 
-            if (schedule.type === "one-time") {
-                if (schedule.dayNumber) {
-                    await scheduleCall(schedule.dayNumber, schedule.time);
-                }
-            } else {
-                // Recurring
-                const daysToSchedule = ramadanDays.filter(d => {
-                    if (schedule.recurrenceType === "daily") return true;
-                    if (schedule.recurrenceType === "weekly") {
-                        return schedule.daysOfWeek?.includes(d.gregorianDate.getDay());
+            // 3. Schedule Task (only if a schedule type was selected)
+            if (schedule.type !== "none") {
+                if (schedule.type === "one-time") {
+                    if (schedule.dayNumber) {
+                        await batchSchedule("once", schedule.time, schedule.dayNumber);
                     }
-                    return false;
-                });
-
-                for (const day of daysToSchedule) {
+                } else {
+                    // Recurring — call once per time slot
                     const times = (schedule.times && schedule.times.length > 0)
                         ? schedule.times
                         : [schedule.time];
 
-                    for (const t of times) {
-                        await scheduleCall(day.dayNumber, t);
+                    if (schedule.recurrenceType === "daily") {
+                        await Promise.all(times.map(t => batchSchedule("daily", t)));
+                    } else if (schedule.recurrenceType === "weekly") {
+                        const daysOfWeek = schedule.daysOfWeek ?? [];
+                        await Promise.all(
+                            daysOfWeek.flatMap(dow =>
+                                times.map(t => batchSchedule("weekly", t, undefined, dow))
+                            )
+                        );
                     }
                 }
             }
@@ -310,14 +317,15 @@ export function CreateTaskModal({
 
                             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
                                 <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${schedule.type === "one-time" ? "bg-amber-400" : "bg-emerald-500"}`} />
+                                    <span className={`w-2 h-2 rounded-full ${schedule.type === "none" ? "bg-slate-400" : schedule.type === "one-time" ? "bg-amber-400" : "bg-emerald-500"}`} />
                                     <span className="font-bold text-slate-700 dark:text-slate-300 dir-rtl">
-                                        {schedule.type === "one-time" ? "مرة واحدة" : (schedule.recurrenceType === "daily" ? "يومياً" : "أسبوعياً")}
+                                        {schedule.type === "none" ? "بدون جدولة" : schedule.type === "one-time" ? "مرة واحدة" : (schedule.recurrenceType === "daily" ? "يومياً" : "أسبوعياً")}
                                     </span>
                                 </div>
                                 <span className="text-xs font-medium text-slate-500">التكرار</span>
                             </div>
 
+                            {schedule.type !== "none" && (
                             <div className="flex justify-between items-start pt-1">
                                 <div className="flex flex-col items-end gap-1">
                                     {(schedule.times && schedule.type === "recurring") ? schedule.times.map((t, i) => (
@@ -328,6 +336,7 @@ export function CreateTaskModal({
                                 </div>
                                 <span className="text-xs font-medium text-slate-500 mt-1">التوقيت</span>
                             </div>
+                            )}
 
                             {schedule.type === "one-time" && schedule.dayNumber && (
                                 <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700">
