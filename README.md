@@ -1,12 +1,16 @@
 # Muslim Planner V1.1
 
 Next.js App Router Muslim planner with:
-- Username/password auth
-- Per-user, per-year plans
-- Dynamic sections and tasks
-- Fast performance with server-side progress calculation
-- Mobile-first category dashboard
-- Neon/Vercel Postgres persistence
+- **Username/password auth**
+- **Per-user, per-year plans**
+- **Dynamic sections and tasks**
+- **Fast performance** with server-side progress calculation
+- **Mobile-first category dashboard**
+- **Neon/Vercel Postgres persistence**
+- **Drag & Drop Interface** for easy task management (`@hello-pangea/dnd`)
+- **Dark Mode** support (`next-themes`)
+- **Daily Tracker** for scheduling tasks
+- **Location-based Prayer Times** (City/Country)
 
 ## 1) Install
 
@@ -25,12 +29,13 @@ Do not expose these variables to the client (`NEXT_PUBLIC_*`).
 
 ## 3) Database migration
 
-Run the migration files in `db/migrations/` sequentially against your database (e.g., Vercel or Neon Postgres).
+Run the migration script to set up your database schema (tables, indices, etc.):
 
 ```bash
-psql $POSTGRES_URL < db/migrations/001_init.sql
-psql $POSTGRES_URL < db/migrations/002_add_indices.sql
+npm run migrate
 ```
+
+This script will sequentially apply all SQL files in `db/migrations/`.
 
 ## Performance Considerations
 - Database indices exist on all foreign keys for fast JOIN performance.
@@ -49,7 +54,7 @@ npm run dev
 1. Import project in Vercel.
 2. Attach Vercel Postgres.
 3. Set `AUTH_SECRET` in Vercel environment variables.
-4. Run migration SQL once on the production DB.
+4. Run `npm run migrate` during the build process or manually via a one-off task.
 
 ## Routes
 
