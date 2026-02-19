@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { RamadanDay } from "@/lib/date-utils";
 
 export interface ScheduleData {
-  type: "one-time" | "recurring";
+  type: "none" | "one-time" | "recurring";
   // One-time
   date?: string; // stored as ISO date string or just YYYY-MM-DD
   dayNumber?: number; // 1-30
@@ -28,12 +28,12 @@ export function ScheduleForm({
   ramadanDays,
   allowMultipleTimes = false,
 }: ScheduleFormProps) {
-  const [activeType, setActiveType] = useState<"one-time" | "recurring">(
+  const [activeType, setActiveType] = useState<"none" | "one-time" | "recurring">(
     value.type
   );
 
   // Sync internal state with prop if needed, or just use props directly
-  const handleTypeChange = (type: "one-time" | "recurring") => {
+  const handleTypeChange = (type: "none" | "one-time" | "recurring") => {
     setActiveType(type);
     onChange({ ...value, type });
   };
@@ -79,7 +79,18 @@ export function ScheduleForm({
   return (
     <div className="space-y-6">
       {/* Type Selection */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-3">
+        <button
+          onClick={() => handleTypeChange("none")}
+          className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
+            activeType === "none"
+              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400"
+              : "border-slate-200 dark:border-slate-800 hover:border-emerald-200 dark:hover:border-slate-700"
+          }`}
+        >
+          <div className={`w-3 h-3 rounded-full ${activeType === "none" ? "bg-emerald-500" : "bg-slate-300"}`} />
+          <span className="font-bold text-sm">بدون جدولة</span>
+        </button>
         <button
           onClick={() => handleTypeChange("one-time")}
           className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${
@@ -106,7 +117,11 @@ export function ScheduleForm({
 
       {/* Details */}
       <div className="animate-in fade-in slide-in-from-top-4 duration-300 space-y-4">
-        {activeType === "one-time" ? (
+        {activeType === "none" ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+            ستُضاف المهمة إلى الخطة بدون تحديد يوم أو وقت
+          </p>
+        ) : activeType === "one-time" ? (
           <>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
