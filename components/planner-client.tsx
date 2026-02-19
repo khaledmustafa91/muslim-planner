@@ -431,7 +431,7 @@ export function PlannerClient({ username }: { username: string }) {
   const [locationForm, setLocationForm] = useState({
     city: "",
     country: "",
-    method: 2,
+    method: 5,
   });
 
   const [countries, setCountries] = useState<string[]>([]);
@@ -637,13 +637,13 @@ export function PlannerClient({ username }: { username: string }) {
       setLocationForm({
         city: plan.locationCity || "", // Store English name internally
         country: countryDisplay, // Store Arabic display name
-        method: plan.calculationMethod || 2,
+        method: plan.calculationMethod || 5,
       });
     } else if (plan) {
       setLocationForm({
         city: "",
         country: "",
-        method: plan.calculationMethod || 2,
+        method: plan.calculationMethod || 5,
       });
     }
   }, [plan]);
