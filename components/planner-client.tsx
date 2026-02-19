@@ -15,7 +15,7 @@ import {
 import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
 import { SearchableSelect } from "./ui/searchable-select";
-import { getRamadanDays } from "@/lib/date-utils";
+import { getRamadanDays, formatTime12h } from "@/lib/date-utils";
 import { CreateCategoryModal } from "./create-category-modal";
 import { CreateTaskModal } from "./create-task-modal";
 import { EditTaskModal } from "./edit-task-modal";
@@ -1975,7 +1975,7 @@ export function PlannerClient({ username }: { username: string }) {
                                 : "bg-slate-100 dark:bg-slate-800 text-slate-500"
                                 }`}
                             >
-                              {task.scheduledTime}
+                              {formatTime12h(task.scheduledTime)}
                             </div>
                             <div
                               onClick={() =>

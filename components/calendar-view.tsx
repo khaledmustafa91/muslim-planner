@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import type { ScheduledTask } from "@/lib/types";
+import { formatTime12h } from "@/lib/date-utils";
 
 interface CalendarViewProps {
   tasks: ScheduledTask[];
@@ -159,7 +160,7 @@ export function CalendarView({
               style={{ top: h * HOUR_HEIGHT, height: HOUR_HEIGHT }}
             >
               <div className="absolute -top-3 left-4 text-[11px] font-black text-slate-300 dark:text-slate-600 tabular-nums">
-                {h.toString().padStart(2, '0')}:00
+                {formatTime12h(`${h.toString().padStart(2, '0')}:00`)}
               </div>
               {/* Quarter hour indicators */}
               {[15, 30, 45].map(m => (
@@ -179,7 +180,7 @@ export function CalendarView({
                style={{ top: hoverMinutes * PIXELS_PER_MINUTE }}
              >
                 <div className="absolute -top-2.5 -left-16 bg-slate-900 text-white text-[9px] font-bold px-2 py-1 rounded-full shadow-xl">
-                  {minutesToTime(hoverMinutes)}
+                  {formatTime12h(minutesToTime(hoverMinutes))}
                 </div>
              </div>
           )}
@@ -252,7 +253,7 @@ export function CalendarView({
                   <div className={`flex-1 flex flex-col min-w-0 p-3 pl-4 ${isVeryShort ? "justify-center" : "justify-start"}`}>
                     <div className={`flex items-center justify-between gap-2 ${isVeryShort ? "absolute -top-6 left-0 bg-slate-800 text-white px-2 py-0.5 rounded-md shadow-lg" : "mb-1"}`}>
                       <span className="text-[9px] font-black tabular-nums opacity-60">
-                        {minutesToTime(startMins)}
+                        {formatTime12h(minutesToTime(startMins))}
                       </span>
                       {!isVeryShort && (
                          <button 

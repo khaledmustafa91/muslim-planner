@@ -54,3 +54,11 @@ export function getRamadanDays(year: number, offset: number = 0): RamadanDay[] {
 
   return days;
 }
+
+export function formatTime12h(time24h: string): string {
+  if (!time24h) return "";
+  const [hours, minutes] = time24h.split(":").map(Number);
+  const period = hours >= 12 ? "م" : "ص";
+  const hours12 = hours % 12 || 12;
+  return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
+}

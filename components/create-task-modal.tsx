@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Modal } from "./ui/modal";
 import { ConfirmModal } from "./ui/confirm-modal";
 import { ScheduleForm, ScheduleData } from "./schedule-form";
-import { RamadanDay } from "@/lib/date-utils";
+import { RamadanDay, formatTime12h } from "@/lib/date-utils";
 import { PlannerSection } from "@/lib/types";
 
 interface CreateTaskModalProps {
@@ -321,9 +321,9 @@ export function CreateTaskModal({
                             <div className="flex justify-between items-start pt-1">
                                 <div className="flex flex-col items-end gap-1">
                                     {(schedule.times && schedule.type === "recurring") ? schedule.times.map((t, i) => (
-                                        <span key={i} className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-sm">{t}</span>
+                                        <span key={i} className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-sm">{formatTime12h(t)}</span>
                                     )) : (
-                                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-sm">{schedule.time}</span>
+                                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-sm">{formatTime12h(schedule.time)}</span>
                                     )}
                                 </div>
                                 <span className="text-xs font-medium text-slate-500 mt-1">التوقيت</span>
