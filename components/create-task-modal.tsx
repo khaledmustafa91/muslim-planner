@@ -9,6 +9,7 @@ interface CreateTaskModalProps {
     isOpen: boolean;
     onClose: () => void;
     planId: string;
+    year: number;
     sections: PlannerSection[];
     ramadanDays: RamadanDay[];
     onSuccess: () => void;
@@ -19,6 +20,7 @@ export function CreateTaskModal({
     isOpen,
     onClose,
     planId,
+    year,
     sections,
     ramadanDays,
     onSuccess,
@@ -114,45 +116,47 @@ export function CreateTaskModal({
 
             const taskId = taskData.task.id;
 
-            // 3. Schedule Task
-            const duration = 30; // default
-
-            // Helper to schedule call
-            const scheduleCall = async (day: number, time: string) => {
-                await fetch("/api/daily-tracker", {
+            // 3. Schedule Task via batch endpoint
+            const batchSchedule = async (scheduleType: string, time: string, selectedDate?: number, selectedDayOfWeek?: number) => {
+                const res = await fetch("/api/tasks/schedule-recurring", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        planId,
+                        year,
                         taskId,
-                        dayNumber: day,
+                        scheduleType,
                         time,
-                        duration
+                        duration: 30,
+                        selectedDate,
+                        selectedDayOfWeek,
                     })
                 });
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || "فشل جدولة المهمة");
+                }
             };
 
             if (schedule.type === "one-time") {
                 if (schedule.dayNumber) {
-                    await scheduleCall(schedule.dayNumber, schedule.time);
+                    await batchSchedule("once", schedule.time, schedule.dayNumber);
                 }
             } else {
-                // Recurring
-                const daysToSchedule = ramadanDays.filter(d => {
-                    if (schedule.recurrenceType === "daily") return true;
-                    if (schedule.recurrenceType === "weekly") {
-                        return schedule.daysOfWeek?.includes(d.gregorianDate.getDay());
-                    }
-                    return false;
-                });
+                // Recurring — call once per time slot
+                const times = (schedule.times && schedule.times.length > 0)
+                    ? schedule.times
+                    : [schedule.time];
 
-                for (const day of daysToSchedule) {
-                    const times = (schedule.times && schedule.times.length > 0)
-                        ? schedule.times
-                        : [schedule.time];
-
-                    for (const t of times) {
-                        await scheduleCall(day.dayNumber, t);
-                    }
+                if (schedule.recurrenceType === "daily") {
+                    await Promise.all(times.map(t => batchSchedule("daily", t)));
+                } else if (schedule.recurrenceType === "weekly") {
+                    const daysOfWeek = schedule.daysOfWeek ?? [];
+                    await Promise.all(
+                        daysOfWeek.flatMap(dow =>
+                            times.map(t => batchSchedule("weekly", t, undefined, dow))
+                        )
+                    );
                 }
             }
 
