@@ -17,6 +17,13 @@ export function validateCredentials(username: unknown, password: unknown): strin
   return null;
 }
 
+export function validateUsernameFormat(username: string): string | null {
+  if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+    return "اسم المستخدم يجب أن يحتوي على حروف إنجليزية فقط بدون مسافات";
+  }
+  return null;
+}
+
 export function badRequest(message: string, status = 400) {
   console.warn(`[BadRequest] ${status}: ${message}`);
   return NextResponse.json({ error: message }, { status });

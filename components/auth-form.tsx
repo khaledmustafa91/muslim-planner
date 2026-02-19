@@ -47,6 +47,12 @@ export function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
     setError(null);
 
+    if (mode === "signup" && !/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+      setError("اسم المستخدم يجب أن يحتوي على حروف إنجليزية فقط بدون مسافات");
+      setLoading(false);
+      return;
+    }
+
     if (mode === "signup" && password !== confirmPassword) {
       setError("كلمات المرور غير متطابقة");
       setLoading(false);
