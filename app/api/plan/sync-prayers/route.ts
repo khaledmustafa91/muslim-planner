@@ -42,9 +42,7 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        const sampleDate = new Date(year, 2, 1); // March 1st
-        const hYear = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { year: 'numeric' }).format(sampleDate);
-        const numericHijriYear = parseInt(hYear.replace(/[^0-9]/g, ''));
+        const numericHijriYear = plan.ramadanYear;
 
         const apiUrl = `https://api.aladhan.com/v1/hijriCalendarByCity/${numericHijriYear}/9?city=${plan.locationCity}&country=${plan.locationCountry}&method=${plan.calculationMethod ?? 2}`;
 
@@ -79,10 +77,12 @@ export async function POST(request: NextRequest) {
         }
 
         const total = calendar.length;
+        const ramadanOffset = plan.ramadanOffset ?? 0;
         let count = 0;
 
         for (let i = 0; i < total; i++) {
-          const dayData = calendar[i];
+          const calendarIndex = Math.max(0, Math.min(i + ramadanOffset, total - 1));
+          const dayData = calendar[calendarIndex];
           const dayNumber = i + 1;
           const rows: { taskId: string; dayNumber: number; time: string; duration: number }[] = [];
 

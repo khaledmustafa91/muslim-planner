@@ -2270,10 +2270,10 @@ export function PlannerClient({ username }: { username: string }) {
                     }))
                   }
                 >
-                  <option value={2}>رابطة العالم الإسلامي</option>
-                  <option value={3}>الهيئة العامة المصرية للمساحة</option>
+                  <option value={3}>رابطة العالم الإسلامي</option>
+                  <option value={5}>الهيئة العامة المصرية للمساحة</option>
                   <option value={4}>جامعة أم القرى، مكة المكرمة</option>
-                  <option value={5}>
+                  <option value={2}>
                     الاتحاد الإسلامي في أمريكا الشمالية (ISNA)
                   </option>
                   <option value={1}>جامعة العلوم الإسلامية، كراتشي</option>
