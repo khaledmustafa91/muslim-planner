@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Amiri, Tajawal } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { InstallAppPrompt } from "@/components/install-app-prompt";
 import "./globals.css";
 
 const tajawal = Tajawal({
@@ -18,8 +19,10 @@ const amiri = Amiri({
 export const metadata: Metadata = {
   title: "Rafiq | رفيق",
   description: "رفيق - تطبيق لتنظيم العبادات والمهام اليومية",
+  manifest: "/manifest.json",
   icons: {
-    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23fcd34d" stroke="%23f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>',
+    icon: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 
@@ -34,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           disableTransitionOnChange={false}
         >
           {children}
+          <InstallAppPrompt />
         </ThemeProvider>
       </body>
     </html>
