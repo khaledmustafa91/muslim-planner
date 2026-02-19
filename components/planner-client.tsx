@@ -15,7 +15,7 @@ import {
 import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
 import { SearchableSelect } from "./ui/searchable-select";
-import { getRamadanDays } from "@/lib/date-utils";
+import { getRamadanDays, getCurrentRamadanDay } from "@/lib/date-utils";
 import { CreateCategoryModal } from "./create-category-modal";
 import { CreateTaskModal } from "./create-task-modal";
 import { EditTaskModal } from "./edit-task-modal";
@@ -385,7 +385,7 @@ export function PlannerClient({ username }: { username: string }) {
   const [trackerMode, setTrackerMode] = useState<"timeline" | "calendar">(
     "timeline",
   );
-  const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [selectedDay, setSelectedDay] = useState<number>(() => getCurrentRamadanDay(currentYear, 0));
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [trackerForm, setTrackerForm] = useState<{
     taskId: string;
@@ -596,6 +596,13 @@ export function PlannerClient({ username }: { username: string }) {
       plan?.dayCount ?? 30,
     );
   }, [year, plan?.dayCount, plan?.ramadanOffset]);
+
+  // Update selected day when plan is loaded (to respect offset)
+  useEffect(() => {
+    if (plan) {
+      setSelectedDay(getCurrentRamadanDay(year, plan.ramadanOffset));
+    }
+  }, [plan, year]);
 
   // Sync location form with plan data
   useEffect(() => {
