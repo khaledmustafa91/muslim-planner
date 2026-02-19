@@ -2,9 +2,17 @@
 
 import { useEffect, useState } from 'react';
 
+// Capture the event at module load time — it fires before React mounts.
+let _deferredPrompt: any = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _deferredPrompt = e;
+  });
+}
+
 export function InstallAppPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showPrompt, setShowPrompt] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(_deferredPrompt);
 
   useEffect(() => {
     // Register service worker
@@ -30,68 +38,54 @@ export function InstallAppPrompt() {
   }, []);
 
   useEffect(() => {
+    // Also listen for the event in case it fires after mount
     const handler = (e: any) => {
-      // Don't show if already in standalone mode
-      if (window.matchMedia('(display-mode: standalone)').matches) {
-        return;
-      }
-      // Prevent the mini-infobar from appearing on mobile
+      if (window.matchMedia('(display-mode: standalone)').matches) return;
       e.preventDefault();
-      // Stash the event so it can be triggered later.
+      _deferredPrompt = e;
       setDeferredPrompt(e);
-      // Update UI notify the user they can install the PWA
-      setShowPrompt(true);
     };
 
     window.addEventListener('beforeinstallprompt', handler);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-    };
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
 
-    // Show the install prompt
     deferredPrompt.prompt();
 
-    // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`User response to the install prompt: ${outcome}`);
 
-    // We've used the prompt, and can't use it again, throw it away
+    _deferredPrompt = null;
     setDeferredPrompt(null);
-    setShowPrompt(false);
   };
 
-  if (!showPrompt) return null;
+  // Hide if already installed in standalone mode
+  if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
+    return null;
+  }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-8 md:w-80 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-2xl border border-amber-200 dark:border-amber-900/30 z-50 flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-amber-600 dark:text-amber-400">
+    <div className="mt-8 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-amber-200 dark:border-amber-900/30 flex flex-col md:flex-row items-center justify-between gap-6 no-print max-w-4xl mx-auto shadow-sm">
+      <div className="flex items-center gap-4 text-right">
+        <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-amber-600 dark:text-amber-400">
             <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
           </svg>
         </div>
         <div>
-          <h3 className="font-bold text-slate-900 dark:text-white text-sm">تثبيت التطبيق</h3>
-          <p className="text-slate-500 dark:text-slate-400 text-xs">قم بتثبيت تطبيق رفيق للوصول السريع ومتابعة عباداتك بسهولة.</p>
+          <h3 className="font-black text-slate-900 dark:text-white text-lg">أضف رفيق إلى متصفحك</h3>
+          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">أضف التطبيق مباشرة من متصفحك للوصول السريع ومتابعة عباداتك بسهولة</p>
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-3 w-full md:w-auto">
         <button
           onClick={handleInstallClick}
-          className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg text-xs transition-colors"
+          className="w-full md:w-auto bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-8 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 active:scale-95"
         >
-          تثبيت الآن
-        </button>
-        <button
-          onClick={() => setShowPrompt(false)}
-          className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-        >
-          ليس الآن
+          أضف إلى الشاشة الرئيسية
         </button>
       </div>
     </div>

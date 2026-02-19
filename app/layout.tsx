@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Amiri, Tajawal } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import { InstallAppPrompt } from "@/components/install-app-prompt";
 import "./globals.css";
 
 const tajawal = Tajawal({
@@ -37,7 +36,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           disableTransitionOnChange={false}
         >
           {children}
-          <InstallAppPrompt />
         </ThemeProvider>
       </body>
     </html>

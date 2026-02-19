@@ -15,11 +15,12 @@ import {
 import type { PlanResponse, PlannerSection, PlannerTask } from "@/lib/types";
 import { Modal } from "./ui/modal";
 import { SearchableSelect } from "./ui/searchable-select";
-import { getRamadanDays } from "@/lib/date-utils";
+import { getRamadanDays, getCurrentRamadanDay } from "@/lib/date-utils";
 import { CreateCategoryModal } from "./create-category-modal";
 import { CreateTaskModal } from "./create-task-modal";
 import { EditTaskModal } from "./edit-task-modal";
 import { CalendarView } from "./calendar-view";
+import { InstallAppPrompt } from "./install-app-prompt";
 
 // --- Geo cache constants ---
 const GEO_CACHE_VERSION = 1;
@@ -385,7 +386,7 @@ export function PlannerClient({ username }: { username: string }) {
   const [trackerMode, setTrackerMode] = useState<"timeline" | "calendar">(
     "timeline",
   );
-  const [selectedDay, setSelectedDay] = useState<number>(1);
+  const [selectedDay, setSelectedDay] = useState<number>(() => getCurrentRamadanDay(currentYear, 0));
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
   const [trackerForm, setTrackerForm] = useState<{
     taskId: string;
@@ -596,6 +597,13 @@ export function PlannerClient({ username }: { username: string }) {
       plan?.dayCount ?? 30,
     );
   }, [year, plan?.dayCount, plan?.ramadanOffset]);
+
+  // Update selected day when plan is loaded (to respect offset)
+  useEffect(() => {
+    if (plan) {
+      setSelectedDay(getCurrentRamadanDay(year, plan.ramadanOffset));
+    }
+  }, [plan, year]);
 
   // Sync location form with plan data
   useEffect(() => {
@@ -2069,14 +2077,21 @@ export function PlannerClient({ username }: { username: string }) {
           </div>
         )}
 
-        <div className="mt-12 text-center text-slate-400 dark:text-slate-500 text-xs no-print flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>يتم حفظ جميع التغييرات تلقائياً</span>
-          </div>
-          <p>© {new Date().getFullYear()} رمضان مبارك</p>
-        </div>
       </main>
+
+      <footer className="mt-12 py-12 border-t border-slate-200 dark:border-slate-800 no-print">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <InstallAppPrompt />
+
+          <div className="mt-8 text-center text-slate-400 dark:text-slate-500 text-xs flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>يتم حفظ جميع التغييرات تلقائياً</span>
+            </div>
+            <p>© {new Date().getFullYear()} رمضان مبارك</p>
+          </div>
+        </div>
+      </footer>
 
       {/* --- Modals --- */}
       <Modal

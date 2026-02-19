@@ -54,3 +54,26 @@ export function getRamadanDays(year: number, offset: number = 0): RamadanDay[] {
 
   return days;
 }
+
+export function getCurrentRamadanDay(year: number, offset: number = 0): number {
+  const now = new Date();
+  const days = getRamadanDays(year, offset);
+  
+  // Find the day where current date is the same as Gregorian date
+  // Reset hours to compare only dates
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  
+  const currentDay = days.find(d => {
+    const dDate = new Date(d.gregorianDate.getFullYear(), d.gregorianDate.getMonth(), d.gregorianDate.getDate()).getTime();
+    return dDate === today;
+  });
+
+  if (!currentDay) {
+    // If not currently in Ramadan, return 1 if before or 30 if after
+    const firstDay = new Date(days[0].gregorianDate.getFullYear(), days[0].gregorianDate.getMonth(), days[0].gregorianDate.getDate()).getTime();
+    if (today < firstDay) return 1;
+    return 30;
+  }
+
+  return currentDay.dayNumber;
+}
