@@ -18,8 +18,8 @@ export function validateCredentials(username: unknown, password: unknown): strin
 }
 
 export function validateUsernameFormat(username: string): string | null {
-  if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-    return "اسم المستخدم يجب أن يحتوي على حروف إنجليزية فقط بدون مسافات";
+  if (!/^[^\u0600-\u06FF\s]+$/.test(username.trim())) {
+    return "اسم المستخدم يجب أن يحتوي على حروف إنجليزية أو رموز بدون مسافات أو حروف عربية";
   }
   return null;
 }

@@ -47,8 +47,8 @@ export function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
     setError(null);
 
-    if (mode === "signup" && !/^[a-zA-Z0-9_]+$/.test(username.trim())) {
-      setError("اسم المستخدم يجب أن يحتوي على حروف إنجليزية فقط بدون مسافات");
+    if (mode === "signup" && !/^[^\u0600-\u06FF\s]+$/.test(username.trim())) {
+      setError("اسم المستخدم يجب أن يحتوي على حروف إنجليزية أو رموز بدون مسافات أو حروف عربية");
       setLoading(false);
       return;
     }
@@ -119,6 +119,11 @@ export function AuthForm({ mode }: AuthFormProps) {
                   placeholder="أدخل اسم المستخدم"
                 />
               </div>
+              {mode === "signup" && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mr-1 text-right">
+                  3-32 حرفًا · حروف إنجليزية، أرقام، ورموز · بدون مسافات أو حروف عربية
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -138,6 +143,11 @@ export function AuthForm({ mode }: AuthFormProps) {
                   placeholder="••••••••"
                 />
               </div>
+              {mode === "signup" && (
+                <p className="text-xs text-slate-400 dark:text-slate-500 mr-1 text-right">
+                  6 أحرف على الأقل · حتى 72 حرفًا
+                </p>
+              )}
             </div>
 
             {mode === "signup" && (
